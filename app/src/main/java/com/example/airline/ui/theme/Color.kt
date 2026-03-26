@@ -2,10 +2,16 @@ package com.example.airline.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// Airline-style palette (deep blues + crisp whites + modern accents)
+val AirlineNavy = Color(0xFF0B1B3A)
+val AirlineNavyDark = Color(0xFF071226)
+val AirlineSky = Color(0xFF1E88E5)
+val AirlineAqua = Color(0xFF00B3FF)
 
-val Purple40 = Color(0xFF6650a4)
-val PurpleGrey40 = Color(0xFF625b71)
-val Pink40 = Color(0xFF7D5260)
+val AirlineBackgroundLight = Color(0xFFF5F9FF)
+val AirlineSurfaceLight = Color(0xFFFFFFFF)
+val AirlineOnBackgroundLight = Color(0xFF0E172A)
+
+val AirlineBackgroundDark = Color(0xFF071226)
+val AirlineSurfaceDark = Color(0xFF0C2145)
+val AirlineOnBackgroundDark = Color(0xFFEAF2FF)
