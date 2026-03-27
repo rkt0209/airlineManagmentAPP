@@ -29,7 +29,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import com.example.airline.ui.screens.admin.AdminAirplanesScreen
+import com.example.airline.ui.screens.admin.AdminAirportsScreen
 import com.example.airline.ui.screens.admin.AdminCitiesScreen
+import com.example.airline.ui.screens.admin.AdminFlightsScreen
 
 @Composable
 fun AdminMainScreen() {
@@ -77,21 +80,9 @@ fun AdminMainScreen() {
                 showBackButton = false,
                 outerPadding = innerPadding
             )
-            1 -> AdminTabPlaceholder(
-                title = "Airports",
-                subtitle = "Airport management coming soon",
-                outerPadding = innerPadding
-            )
-            2 -> AdminTabPlaceholder(
-                title = "Airplanes",
-                subtitle = "Airplane management coming soon",
-                outerPadding = innerPadding
-            )
-            3 -> AdminTabPlaceholder(
-                title = "Flights",
-                subtitle = "Flight management coming soon",
-                outerPadding = innerPadding
-            )
+            1 -> AdminAirportsScreen(outerPadding = innerPadding)
+            2 -> AdminAirplanesScreen(outerPadding = innerPadding)
+            3 -> AdminFlightsScreen(outerPadding = innerPadding)
             else -> AdminTabPlaceholder(
                 title = "Admin Profile",
                 subtitle = "Profile tools coming soon",
