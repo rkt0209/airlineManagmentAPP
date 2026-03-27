@@ -21,6 +21,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -47,7 +48,8 @@ data class AirportOption(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onSearchFlights: (departureCode: String, arrivalCode: String, selectedDate: String) -> Unit
+    onSearchFlights: (departureCode: String, arrivalCode: String, selectedDate: String) -> Unit,
+    onOpenAdminDashboard: () -> Unit
 ) {
     val airports = remember {
         listOf(
@@ -165,6 +167,16 @@ fun HomeScreen(
                             shape = RoundedCornerShape(16.dp)
                         ) {
                             Text(text = "Search Flights", style = MaterialTheme.typography.titleMedium)
+                        }
+
+                        OutlinedButton(
+                            onClick = onOpenAdminDashboard,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(52.dp),
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Text(text = "Open Admin Dashboard")
                         }
                     }
                 }

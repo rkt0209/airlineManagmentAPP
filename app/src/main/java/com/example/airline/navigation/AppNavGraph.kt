@@ -8,6 +8,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.airline.ui.screens.auth.LoginScreen
+import com.example.airline.ui.screens.admin.AdminCitiesScreen
+import com.example.airline.ui.screens.admin.AdminDashboardScreen
 import com.example.airline.ui.screens.auth.SignupScreen
 import com.example.airline.ui.screens.booking.FlightDetailScreen
 import com.example.airline.ui.screens.booking.FlightResultsScreen
@@ -25,6 +27,8 @@ private object Routes {
     const val FlightDetailWithArgs =
         "flight-detail?departure={departure}&arrival={arrival}&date={date}&flightNumber={flightNumber}&departureTime={departureTime}&arrivalTime={arrivalTime}&pricePerSeat={pricePerSeat}"
     const val MyBookings = "my-bookings"
+    const val AdminDashboard = "admin-dashboard"
+    const val AdminCities = "admin-cities"
 }
 
 @Composable
@@ -63,6 +67,9 @@ fun AppNavGraph() {
                     navController.navigate(
                         "${Routes.FlightResults}?departure=$departureCode&arrival=$arrivalCode&date=$selectedDate"
                     )
+                },
+                onOpenAdminDashboard = {
+                    navController.navigate(Routes.AdminDashboard)
                 }
             )
         }
@@ -131,6 +138,19 @@ fun AppNavGraph() {
                         popUpTo(Routes.Home) { inclusive = true }
                     }
                 }
+            )
+        }
+
+        composable(Routes.AdminDashboard) {
+            AdminDashboardScreen(
+                onBack = { navController.popBackStack() },
+                onManageCities = { navController.navigate(Routes.AdminCities) }
+            )
+        }
+
+        composable(Routes.AdminCities) {
+            AdminCitiesScreen(
+                onBack = { navController.popBackStack() }
             )
         }
     }
