@@ -95,12 +95,23 @@ fun AppNavGraph() {
                     navController.navigate(
                         "${Routes.FlightResults}?departure=$departureCode&arrival=$arrivalCode&date=$selectedDate"
                     )
+                },
+                onLogout = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
                 }
             )
         }
 
         composable(Routes.AdminMain) {
-            AdminMainScreen()
+            AdminMainScreen(
+                onLogout = {
+                    navController.navigate(Routes.Login) {
+                        popUpTo(navController.graph.id) { inclusive = true }
+                    }
+                }
+            )
         }
 
         composable(

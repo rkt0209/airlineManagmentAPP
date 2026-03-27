@@ -33,9 +33,10 @@ import com.example.airline.ui.screens.admin.AdminAirplanesScreen
 import com.example.airline.ui.screens.admin.AdminAirportsScreen
 import com.example.airline.ui.screens.admin.AdminCitiesScreen
 import com.example.airline.ui.screens.admin.AdminFlightsScreen
+import com.example.airline.ui.screens.profile.AdminProfileScreen
 
 @Composable
-fun AdminMainScreen() {
+fun AdminMainScreen(onLogout: () -> Unit) {
     var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     Scaffold(
@@ -83,15 +84,15 @@ fun AdminMainScreen() {
             1 -> AdminAirportsScreen(outerPadding = innerPadding)
             2 -> AdminAirplanesScreen(outerPadding = innerPadding)
             3 -> AdminFlightsScreen(outerPadding = innerPadding)
-            else -> AdminTabPlaceholder(
-                title = "Admin Profile",
-                subtitle = "Profile tools coming soon",
-                outerPadding = innerPadding
+            else -> AdminProfileScreen(
+                outerPadding = innerPadding,
+                onLogout = onLogout
             )
         }
     }
 }
 
+// Kept for any future placeholder tabs
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdminTabPlaceholder(
