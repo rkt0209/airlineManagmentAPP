@@ -42,8 +42,8 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun LoginScreen(
-    onLoginSuccess: () -> Unit,
-    onSignupClick: () -> Unit,
+    onLoginSuccess: (role: String) -> Unit,
+    onSignupClick: (role: String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     var email by rememberSaveable { mutableStateOf("") }
@@ -54,6 +54,7 @@ fun LoginScreen(
     var showPassword by rememberSaveable { mutableStateOf(false) }
     var isSubmitting by rememberSaveable { mutableStateOf(false) }
     var loginSuccess by rememberSaveable { mutableStateOf(false) }
+    var selectedRole by rememberSaveable { mutableStateOf("Passenger") }
 
     val scrollState = rememberScrollState()
     val scope = rememberCoroutineScope()
@@ -62,7 +63,7 @@ fun LoginScreen(
     LaunchedEffect(loginSuccess) {
         if (loginSuccess) {
             delay(650)
-            onLoginSuccess()
+            onLoginSuccess(selectedRole)
         }
     }
 
@@ -195,6 +196,11 @@ fun LoginScreen(
                             }
                         }
 
+                        RoleSelectorRow(
+                            selectedRole = selectedRole,
+                            onRoleSelected = { selectedRole = it }
+                        )
+
                         Spacer(modifier = Modifier.height(6.dp))
 
                         Button(
@@ -236,13 +242,60 @@ fun LoginScreen(
                     }
                 }
 
-                TextButton(onClick = onSignupClick) {
+                TextButton(onClick = { onSignupClick(selectedRole) }) {
                     Text("Don't have an account? Sign up")
                 }
 
                 Spacer(modifier = Modifier.height(24.dp))
             }
         }
+    }
+}
+
+@Composable
+private fun RoleSelectorRow(
+    selectedRole: String,
+    onRoleSelected: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Role",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            RoleButton(
+                text = "Passenger",
+                selected = selectedRole == "Passenger",
+                onClick = { onRoleSelected("Passenger") },
+                modifier = Modifier.weight(1f)
+            )
+            RoleButton(
+                text = "Admin",
+                selected = selectedRole == "Admin",
+                onClick = { onRoleSelected("Admin") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun RoleButton(
+    text: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Button(
+        onClick = onClick,
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Text(if (selected) "✓ $text" else text)
     }
 }
 

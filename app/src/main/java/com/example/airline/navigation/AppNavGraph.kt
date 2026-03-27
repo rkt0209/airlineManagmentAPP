@@ -8,27 +8,25 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import com.example.airline.ui.screens.auth.LoginScreen
-import com.example.airline.ui.screens.admin.AdminCitiesScreen
-import com.example.airline.ui.screens.admin.AdminDashboardScreen
 import com.example.airline.ui.screens.auth.SignupScreen
 import com.example.airline.ui.screens.booking.FlightDetailScreen
 import com.example.airline.ui.screens.booking.FlightResultsScreen
-import com.example.airline.ui.screens.booking.HomeScreen
-import com.example.airline.ui.screens.booking.MyBookingsScreen
+import com.example.airline.ui.screens.main.AdminMainScreen
+import com.example.airline.ui.screens.main.UserMainScreen
 
 private object Routes {
     const val Login = "login"
     const val Signup = "signup"
-    const val Home = "home"
+    const val SignupWithRole = "signup?role={role}"
+    const val UserMain = "user-main"
+    const val UserMainWithTab = "user-main?tab={tab}"
+    const val AdminMain = "admin-main"
     const val FlightResults = "flight-results"
     const val FlightResultsWithArgs =
         "flight-results?departure={departure}&arrival={arrival}&date={date}"
     const val FlightDetail = "flight-detail"
     const val FlightDetailWithArgs =
         "flight-detail?departure={departure}&arrival={arrival}&date={date}&flightNumber={flightNumber}&departureTime={departureTime}&arrivalTime={arrivalTime}&pricePerSeat={pricePerSeat}"
-    const val MyBookings = "my-bookings"
-    const val AdminDashboard = "admin-dashboard"
-    const val AdminCities = "admin-cities"
 }
 
 @Composable
@@ -40,38 +38,69 @@ fun AppNavGraph() {
     ) {
         composable(Routes.Login) {
             LoginScreen(
-                onLoginSuccess = {
-                    navController.navigate(Routes.Home) {
-                        popUpTo(Routes.Login) { inclusive = true }
+                onLoginSuccess = { role ->
+                    if (role == "Admin") {
+                        navController.navigate(Routes.AdminMain) {
+                            popUpTo(Routes.Login) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate("${Routes.UserMain}?tab=0") {
+                            popUpTo(Routes.Login) { inclusive = true }
+                        }
                     }
                 },
-                onSignupClick = {
-                    navController.navigate(Routes.Signup)
+                onSignupClick = { role ->
+                    navController.navigate("${Routes.Signup}?role=${Uri.encode(role)}")
                 }
             )
         }
 
-        composable(Routes.Signup) {
+        composable(
+            route = Routes.SignupWithRole,
+            arguments = listOf(
+                navArgument("role") {
+                    type = NavType.StringType
+                    defaultValue = "Passenger"
+                }
+            )
+        ) { backStackEntry ->
             SignupScreen(
-                onSignupComplete = {
-                    navController.navigate(Routes.Home) {
-                        popUpTo(Routes.Signup) { inclusive = true }
+                initialRole = backStackEntry.arguments?.getString("role").orEmpty(),
+                onSignupComplete = { role ->
+                    if (role == "Admin") {
+                        navController.navigate(Routes.AdminMain) {
+                            popUpTo(Routes.Login) { inclusive = true }
+                        }
+                    } else {
+                        navController.navigate("${Routes.UserMain}?tab=0") {
+                            popUpTo(Routes.Login) { inclusive = true }
+                        }
                     }
                 }
             )
         }
 
-        composable(Routes.Home) {
-            HomeScreen(
+        composable(
+            route = Routes.UserMainWithTab,
+            arguments = listOf(
+                navArgument("tab") {
+                    type = NavType.IntType
+                    defaultValue = 0
+                }
+            )
+        ) { backStackEntry ->
+            UserMainScreen(
+                initialTab = backStackEntry.arguments?.getInt("tab") ?: 0,
                 onSearchFlights = { departureCode, arrivalCode, selectedDate ->
                     navController.navigate(
                         "${Routes.FlightResults}?departure=$departureCode&arrival=$arrivalCode&date=$selectedDate"
                     )
-                },
-                onOpenAdminDashboard = {
-                    navController.navigate(Routes.AdminDashboard)
                 }
             )
+        }
+
+        composable(Routes.AdminMain) {
+            AdminMainScreen()
         }
 
         composable(
@@ -124,33 +153,10 @@ fun AppNavGraph() {
                 pricePerSeat = backStackEntry.arguments?.getInt("pricePerSeat") ?: 0,
                 onBack = { navController.popBackStack() },
                 onBookingConfirmed = {
-                    navController.navigate(Routes.MyBookings) {
-                        popUpTo(Routes.FlightDetail) { inclusive = true }
+                    navController.navigate("${Routes.UserMain}?tab=1") {
+                        popUpTo(Routes.UserMain) { inclusive = false }
                     }
                 }
-            )
-        }
-
-        composable(Routes.MyBookings) {
-            MyBookingsScreen(
-                onBackHome = {
-                    navController.navigate(Routes.Home) {
-                        popUpTo(Routes.Home) { inclusive = true }
-                    }
-                }
-            )
-        }
-
-        composable(Routes.AdminDashboard) {
-            AdminDashboardScreen(
-                onBack = { navController.popBackStack() },
-                onManageCities = { navController.navigate(Routes.AdminCities) }
-            )
-        }
-
-        composable(Routes.AdminCities) {
-            AdminCitiesScreen(
-                onBack = { navController.popBackStack() }
             )
         }
     }

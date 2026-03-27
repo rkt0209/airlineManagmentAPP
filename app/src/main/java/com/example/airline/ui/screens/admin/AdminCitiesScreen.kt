@@ -44,7 +44,8 @@ import androidx.compose.ui.unit.dp
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminCitiesScreen(
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    showBackButton: Boolean = true
 ) {
     val context = LocalContext.current
     val cities = remember {
@@ -58,7 +59,9 @@ fun AdminCitiesScreen(
             TopAppBar(
                 title = { Text("Manage Cities") },
                 navigationIcon = {
-                    TextButton(onClick = onBack) { Text("Back") }
+                    if (showBackButton) {
+                        TextButton(onClick = onBack) { Text("Back") }
+                    }
                 }
             )
         },
