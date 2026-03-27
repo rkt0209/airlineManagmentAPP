@@ -67,28 +67,6 @@ fun SignupScreen(
         }
     }
 
-    fun validate(): Boolean {
-        var ok = true
-        emailError = null
-        passwordError = null
-        confirmError = null
-
-        val trimmedEmail = email.trim()
-        if (trimmedEmail.isEmpty() || !trimmedEmail.contains("@")) {
-            emailError = "Enter a valid email"
-            ok = false
-        }
-        if (password.length < 3) {
-            passwordError = "Password must be at least 3 characters"
-            ok = false
-        }
-        if (confirmPassword != password) {
-            confirmError = "Passwords do not match"
-            ok = false
-        }
-        return ok
-    }
-
     Scaffold { innerPadding ->
         Box(
             modifier = modifier
@@ -241,7 +219,6 @@ fun SignupScreen(
                         Button(
                             onClick = {
                                 if (isSubmitting) return@Button
-                                if (!validate()) return@Button
 
                                 isSubmitting = true
                                 scope.launch {

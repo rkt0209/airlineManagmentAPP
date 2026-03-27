@@ -66,23 +66,6 @@ fun LoginScreen(
         }
     }
 
-    fun validate(): Boolean {
-        var ok = true
-        emailError = null
-        passwordError = null
-
-        val trimmedEmail = email.trim()
-        if (trimmedEmail.isEmpty() || !trimmedEmail.contains("@")) {
-            emailError = "Enter a valid email"
-            ok = false
-        }
-        if (password.isBlank()) {
-            passwordError = "Password is required"
-            ok = false
-        }
-        return ok
-    }
-
     Scaffold { innerPadding ->
         Box(
             modifier = modifier
@@ -217,7 +200,6 @@ fun LoginScreen(
                         Button(
                             onClick = {
                                 if (isSubmitting) return@Button
-                                if (!validate()) return@Button
 
                                 isSubmitting = true
                                 // Mock request latency
