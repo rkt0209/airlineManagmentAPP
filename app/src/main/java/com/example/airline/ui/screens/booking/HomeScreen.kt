@@ -5,7 +5,9 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -25,6 +27,8 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,7 +51,8 @@ data class AirportOption(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
-    onSearchFlights: (departureCode: String, arrivalCode: String, selectedDate: String) -> Unit
+    onSearchFlights: (departureCode: String, arrivalCode: String, selectedDate: String) -> Unit,
+    outerPadding: PaddingValues = PaddingValues()
 ) {
     val airports = remember {
         listOf(
@@ -70,7 +75,18 @@ fun HomeScreen(
         initialSelectedDateMillis = System.currentTimeMillis()
     )
 
-    Scaffold { innerPadding ->
+    Scaffold(
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                title = { Text("Search Flights") },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        }
+    ) { innerPadding ->
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -87,10 +103,11 @@ fun HomeScreen(
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(20.dp)
+                    .padding(horizontal = 20.dp)
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(18.dp)
             ) {
+                Spacer(modifier = Modifier.height(20.dp))
                 Card(
                     shape = RoundedCornerShape(24.dp),
                     modifier = Modifier.fillMaxWidth()
@@ -168,6 +185,8 @@ fun HomeScreen(
                         }
                     }
                 }
+                // Ensure last content clears the outer bottom nav bar
+                Spacer(modifier = Modifier.height(outerPadding.calculateBottomPadding()))
             }
         }
     }

@@ -2,19 +2,25 @@ package com.example.airline.ui.screens.main
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AirplanemodeActive
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -47,12 +53,18 @@ fun AdminMainScreen() {
                 NavigationBarItem(
                     selected = selectedTab == 2,
                     onClick = { selectedTab = 2 },
-                    icon = { Icon(Icons.Filled.Flight, contentDescription = "Flights") },
-                    label = { Text("Flights") }
+                    icon = { Icon(Icons.Filled.AirplanemodeActive, contentDescription = "Airplanes") },
+                    label = { Text("Airplanes") }
                 )
                 NavigationBarItem(
                     selected = selectedTab == 3,
                     onClick = { selectedTab = 3 },
+                    icon = { Icon(Icons.Filled.Flight, contentDescription = "Flights") },
+                    label = { Text("Flights") }
+                )
+                NavigationBarItem(
+                    selected = selectedTab == 4,
+                    onClick = { selectedTab = 4 },
                     icon = { Icon(Icons.Filled.Person, contentDescription = "Profile") },
                     label = { Text("Profile") }
                 )
@@ -60,47 +72,72 @@ fun AdminMainScreen() {
         }
     ) { innerPadding ->
         when (selectedTab) {
-            0 -> AdminCitiesScreen(onBack = {}, showBackButton = false)
+            0 -> AdminCitiesScreen(
+                onBack = {},
+                showBackButton = false,
+                outerPadding = innerPadding
+            )
             1 -> AdminTabPlaceholder(
                 title = "Airports",
                 subtitle = "Airport management coming soon",
-                modifier = Modifier.padding(innerPadding)
+                outerPadding = innerPadding
             )
             2 -> AdminTabPlaceholder(
+                title = "Airplanes",
+                subtitle = "Airplane management coming soon",
+                outerPadding = innerPadding
+            )
+            3 -> AdminTabPlaceholder(
                 title = "Flights",
                 subtitle = "Flight management coming soon",
-                modifier = Modifier.padding(innerPadding)
+                outerPadding = innerPadding
             )
             else -> AdminTabPlaceholder(
                 title = "Admin Profile",
                 subtitle = "Profile tools coming soon",
-                modifier = Modifier.padding(innerPadding)
+                outerPadding = innerPadding
             )
         }
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AdminTabPlaceholder(
     title: String,
     subtitle: String,
-    modifier: Modifier = Modifier
+    outerPadding: PaddingValues = PaddingValues()
 ) {
-    Column(
-        modifier = modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = subtitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+    Scaffold(
+        modifier = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
+        contentWindowInsets = WindowInsets(0),
+        topBar = {
+            TopAppBar(
+                title = { Text(title) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
     }
 }
-

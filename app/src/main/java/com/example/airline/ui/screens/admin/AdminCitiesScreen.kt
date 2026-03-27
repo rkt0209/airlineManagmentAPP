@@ -1,11 +1,14 @@
 package com.example.airline.ui.screens.admin
 
 import android.widget.Toast
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -28,6 +31,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -45,7 +49,8 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun AdminCitiesScreen(
     onBack: () -> Unit,
-    showBackButton: Boolean = true
+    showBackButton: Boolean = true,
+    outerPadding: PaddingValues = PaddingValues()
 ) {
     val context = LocalContext.current
     val cities = remember {
@@ -55,6 +60,8 @@ fun AdminCitiesScreen(
     var newCity by remember { mutableStateOf("") }
 
     Scaffold(
+        modifier = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
+        contentWindowInsets = WindowInsets(0),
         topBar = {
             TopAppBar(
                 title = { Text("Manage Cities") },
@@ -62,7 +69,11 @@ fun AdminCitiesScreen(
                     if (showBackButton) {
                         TextButton(onClick = onBack) { Text("Back") }
                     }
-                }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         },
         floatingActionButton = {
