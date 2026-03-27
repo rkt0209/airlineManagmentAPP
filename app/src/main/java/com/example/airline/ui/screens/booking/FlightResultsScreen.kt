@@ -1,6 +1,5 @@
 package com.example.airline.ui.screens.booking
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -26,15 +25,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import java.text.NumberFormat
+import java.util.Locale
 
 data class FlightUi(
     val flightNumber: String,
     val departureTime: String,
     val arrivalTime: String,
-    val price: String,
+    val pricePerSeat: Int,
     val seatsLeft: Int
 )
 
@@ -44,16 +44,16 @@ fun FlightResultsScreen(
     departureCode: String,
     arrivalCode: String,
     selectedDate: String,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onFlightSelected: (flight: FlightUi, departureCode: String, arrivalCode: String, date: String) -> Unit
 ) {
-    val context = LocalContext.current
     val flights = remember(departureCode, arrivalCode, selectedDate) {
         listOf(
-            FlightUi("FL-101", "06:15", "08:35", "Rs 5,499", 12),
-            FlightUi("FL-233", "09:10", "11:30", "Rs 6,150", 7),
-            FlightUi("FL-407", "13:45", "16:00", "Rs 5,980", 18),
-            FlightUi("FL-592", "18:20", "20:40", "Rs 7,250", 5),
-            FlightUi("FL-730", "21:10", "23:25", "Rs 6,780", 9),
+            FlightUi("FL-101", "06:15", "08:35", 5499, 12),
+            FlightUi("FL-233", "09:10", "11:30", 6150, 7),
+            FlightUi("FL-407", "13:45", "16:00", 5980, 18),
+            FlightUi("FL-592", "18:20", "20:40", 7250, 5),
+            FlightUi("FL-730", "21:10", "23:25", 6780, 9),
         )
     }
 
@@ -108,13 +108,7 @@ fun FlightResultsScreen(
                             .fillMaxWidth()
                             .pointerInput(flight.flightNumber) {
                                 detectTapGestures {
-                                    Toast
-                                        .makeText(
-                                            context,
-                                            "Selected Flight ${flight.flightNumber}",
-                                            Toast.LENGTH_SHORT
-                                        )
-                                        .show()
+                                    onFlightSelected(flight, departureCode, arrivalCode, selectedDate)
                                 }
                             }
                     ) {
@@ -135,7 +129,7 @@ fun FlightResultsScreen(
                                     fontWeight = FontWeight.Bold
                                 )
                                 Text(
-                                    text = flight.price,
+                                    text = formatCurrency(flight.pricePerSeat),
                                     style = MaterialTheme.typography.titleLarge,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.ExtraBold
@@ -161,6 +155,11 @@ fun FlightResultsScreen(
             }
         }
     }
+}
+
+private fun formatCurrency(amount: Int): String {
+    val numberFormat = NumberFormat.getNumberInstance(Locale("en", "IN"))
+    return "Rs ${numberFormat.format(amount)}"
 }
 
 @Composable
