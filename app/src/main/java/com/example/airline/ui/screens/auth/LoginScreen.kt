@@ -38,10 +38,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -57,8 +57,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.hilt.navigation.compose.hiltViewModel
 
 // Auth-specific palette — hardcoded so dynamic color on Android 12+ cannot override it
 private val AuthNavyTop    = Color(0xFF0B1B3A)
@@ -72,23 +71,31 @@ private val AuthAccent     = Color(0xFF1E88E5)
 fun LoginScreen(
     onLoginSuccess: (role: String) -> Unit,
     onSignupClick: (role: String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
-    var email          by rememberSaveable { mutableStateOf("") }
-    var password       by rememberSaveable { mutableStateOf("") }
-    var emailError     by rememberSaveable { mutableStateOf<String?>(null) }
-    var passwordError  by rememberSaveable { mutableStateOf<String?>(null) }
-    var showPassword   by rememberSaveable { mutableStateOf(false) }
-    var isSubmitting   by rememberSaveable { mutableStateOf(false) }
-    var loginSuccess   by rememberSaveable { mutableStateOf(false) }
-    var selectedRole   by rememberSaveable { mutableStateOf("Passenger") }
+    var email         by rememberSaveable { mutableStateOf("") }
+    var password      by rememberSaveable { mutableStateOf("") }
+    var emailError    by rememberSaveable { mutableStateOf<String?>(null) }
+    var passwordError by rememberSaveable { mutableStateOf<String?>(null) }
+    var showPassword  by rememberSaveable { mutableStateOf(false) }
+    var selectedRole  by rememberSaveable { mutableStateOf("Passenger") }
 
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsState()
+    val isLoading = uiState is AuthUiState.Loading
+    val isSuccess = uiState is AuthUiState.Success
 
-    LaunchedEffect(loginSuccess) {
-        if (loginSuccess) {
-            delay(650)
-            onLoginSuccess(selectedRole)
+    // Navigate on success; show API error inline
+    LaunchedEffect(uiState) {
+        when (val state = uiState) {
+            is AuthUiState.Success -> {
+                onLoginSuccess(state.role)
+                viewModel.resetState()
+            }
+            is AuthUiState.Error -> {
+                emailError = state.message
+            }
+            else -> {}
         }
     }
 
@@ -238,21 +245,25 @@ fun LoginScreen(
 
                     Button(
                         onClick = {
-                            if (isSubmitting) return@Button
-                            isSubmitting = true
-                            scope.launch {
-                                delay(450)
-                                isSubmitting = false
-                                loginSuccess = true
+                            if (isLoading) return@Button
+                            var valid = true
+                            if (email.isBlank()) {
+                                emailError = "Email is required"
+                                valid = false
                             }
+                            if (password.isBlank()) {
+                                passwordError = "Password is required"
+                                valid = false
+                            }
+                            if (valid) viewModel.signIn(email.trim(), password, selectedRole)
                         },
-                        enabled = !isSubmitting,
+                        enabled = !isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
                         shape = RoundedCornerShape(14.dp)
                     ) {
-                        if (isSubmitting) {
+                        if (isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 color = MaterialTheme.colorScheme.onPrimary,
@@ -272,7 +283,7 @@ fun LoginScreen(
                         }
                     }
 
-                    if (loginSuccess) {
+                    if (isSuccess) {
                         Text(
                             text = "Login successful. Redirecting…",
                             style = MaterialTheme.typography.bodyMedium,

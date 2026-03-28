@@ -37,10 +37,10 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -56,8 +56,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.view.WindowCompat
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.hilt.navigation.compose.hiltViewModel
 
 private val AuthNavyTop     = Color(0xFF0B1B3A)
 private val AuthNavyMid     = Color(0xFF0D2247)
@@ -70,7 +69,8 @@ private val AuthAccent      = Color(0xFF1E88E5)
 fun SignupScreen(
     onSignupComplete: (role: String) -> Unit,
     initialRole: String,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    viewModel: AuthViewModel = hiltViewModel()
 ) {
     var email           by rememberSaveable { mutableStateOf("") }
     var password        by rememberSaveable { mutableStateOf("") }
@@ -79,16 +79,23 @@ fun SignupScreen(
     var passwordError   by rememberSaveable { mutableStateOf<String?>(null) }
     var confirmError    by rememberSaveable { mutableStateOf<String?>(null) }
     var showPassword    by rememberSaveable { mutableStateOf(false) }
-    var isSubmitting    by rememberSaveable { mutableStateOf(false) }
-    var signupSuccess   by rememberSaveable { mutableStateOf(false) }
     var selectedRole    by rememberSaveable { mutableStateOf(initialRole) }
 
-    val scope = rememberCoroutineScope()
+    val uiState by viewModel.uiState.collectAsState()
+    val isLoading = uiState is AuthUiState.Loading
+    val isSuccess = uiState is AuthUiState.Success
 
-    LaunchedEffect(signupSuccess) {
-        if (signupSuccess) {
-            delay(550)
-            onSignupComplete(selectedRole)
+    // Navigate on success; surface API errors inline
+    LaunchedEffect(uiState) {
+        when (val state = uiState) {
+            is AuthUiState.Success -> {
+                onSignupComplete(state.role)
+                viewModel.resetState()
+            }
+            is AuthUiState.Error -> {
+                emailError = state.message
+            }
+            else -> {}
         }
     }
 
@@ -258,21 +265,29 @@ fun SignupScreen(
 
                     Button(
                         onClick = {
-                            if (isSubmitting) return@Button
-                            isSubmitting = true
-                            scope.launch {
-                                delay(450)
-                                isSubmitting = false
-                                signupSuccess = true
+                            if (isLoading) return@Button
+                            var valid = true
+                            if (email.isBlank()) {
+                                emailError = "Email is required"
+                                valid = false
                             }
+                            if (password.isBlank()) {
+                                passwordError = "Password is required"
+                                valid = false
+                            }
+                            if (password != confirmPassword) {
+                                confirmError = "Passwords do not match"
+                                valid = false
+                            }
+                            if (valid) viewModel.signUp(email.trim(), password, selectedRole)
                         },
-                        enabled = !isSubmitting,
+                        enabled = !isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
                         shape = RoundedCornerShape(14.dp)
                     ) {
-                        if (isSubmitting) {
+                        if (isLoading) {
                             CircularProgressIndicator(
                                 modifier = Modifier.size(20.dp),
                                 color = MaterialTheme.colorScheme.onPrimary,
@@ -292,7 +307,7 @@ fun SignupScreen(
                         }
                     }
 
-                    if (signupSuccess) {
+                    if (isSuccess) {
                         Text(
                             text = "Account created. Redirecting…",
                             style = MaterialTheme.typography.bodyMedium,
