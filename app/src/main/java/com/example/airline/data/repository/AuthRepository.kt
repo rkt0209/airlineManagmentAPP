@@ -2,8 +2,9 @@ package com.example.airline.data.repository
 
 import com.example.airline.core.network.TokenManager
 import com.example.airline.data.remote.AuthApi
-import com.example.airline.data.remote.AuthRequest
+import com.example.airline.data.remote.SignInRequest
 import com.example.airline.data.remote.SignInResponse
+import com.example.airline.data.remote.SignUpRequest
 import com.example.airline.data.remote.SignUpResponse
 import com.google.gson.JsonParser
 import retrofit2.HttpException
@@ -16,23 +17,22 @@ class AuthRepository @Inject constructor(
     private val tokenManager: TokenManager
 ) {
 
-    suspend fun signUp(email: String, password: String): Result<SignUpResponse> =
+    suspend fun signUp(email: String, password: String, role: String): Result<SignUpResponse> =
         runCatching {
-            authApi.signUp(AuthRequest(email, password))
+            authApi.signUp(SignUpRequest(email, password, role))
         }.mapHttpError()
 
-    suspend fun signIn(email: String, password: String): Result<SignInResponse> =
+    suspend fun signIn(email: String, password: String, role: String): Result<SignInResponse> =
         runCatching {
-            val response = authApi.signIn(AuthRequest(email, password))
+            val response = authApi.signIn(SignInRequest(email, password, role))
             tokenManager.saveToken(response.data)
             response
         }.mapHttpError()
 
     /**
-     * For non-2xx responses, Retrofit throws HttpException.
-     * This unwraps the server's JSON error body (e.g. {"message":"..."})
-     * so the ViewModel receives the actual server message instead of
-     * the generic "HTTP 500 Internal Server Error" string.
+     * Extracts the server's JSON "message" field from non-2xx responses so the
+     * ViewModel (and ultimately the UI) shows the real reason instead of
+     * a generic "HTTP 4xx" string.
      */
     private fun <T> Result<T>.mapHttpError(): Result<T> = this.recoverCatching { e ->
         if (e is HttpException) {

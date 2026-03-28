@@ -22,10 +22,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -34,6 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
@@ -81,11 +84,13 @@ fun SignupScreen(
     var showPassword    by rememberSaveable { mutableStateOf(false) }
     var selectedRole    by rememberSaveable { mutableStateOf(initialRole) }
 
-    val uiState by viewModel.uiState.collectAsState()
+    // Holds the message shown in the error AlertDialog; null = dialog hidden
+    var dialogError     by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val uiState  by viewModel.uiState.collectAsState()
     val isLoading = uiState is AuthUiState.Loading
     val isSuccess = uiState is AuthUiState.Success
 
-    // Navigate on success; surface API errors inline
     LaunchedEffect(uiState) {
         when (val state = uiState) {
             is AuthUiState.Success -> {
@@ -93,10 +98,33 @@ fun SignupScreen(
                 viewModel.resetState()
             }
             is AuthUiState.Error -> {
-                emailError = state.message
+                dialogError = state.message
+                viewModel.resetState()
             }
             else -> {}
         }
+    }
+
+    // Error AlertDialog
+    if (dialogError != null) {
+        AlertDialog(
+            onDismissRequest = { dialogError = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Sign Up Failed") },
+            text  = { Text(dialogError ?: "") },
+            confirmButton = {
+                TextButton(onClick = { dialogError = null }) {
+                    Text("OK", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 
     // Pin status bar to navy regardless of dynamic color / current theme
@@ -112,9 +140,7 @@ fun SignupScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(listOf(AuthNavyTop, AuthNavyMid, AuthNavyBottom))
-            )
+            .background(Brush.verticalGradient(listOf(AuthNavyTop, AuthNavyMid, AuthNavyBottom)))
     ) {
         Column(
             modifier = Modifier
@@ -194,11 +220,8 @@ fun SignupScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Email address") },
                         leadingIcon = {
-                            Icon(
-                                Icons.Filled.Email,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Filled.Email, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         },
                         isError = emailError != null,
                         supportingText = { if (emailError != null) Text(emailError!!) },
@@ -212,11 +235,8 @@ fun SignupScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Password") },
                         leadingIcon = {
-                            Icon(
-                                Icons.Filled.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Filled.Lock, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         },
                         trailingIcon = {
                             IconButton(onClick = { showPassword = !showPassword }) {
@@ -242,11 +262,8 @@ fun SignupScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Confirm password") },
                         leadingIcon = {
-                            Icon(
-                                Icons.Filled.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Filled.Lock, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         },
                         isError = confirmError != null,
                         supportingText = { if (confirmError != null) Text(confirmError!!) },
@@ -268,23 +285,18 @@ fun SignupScreen(
                             if (isLoading) return@Button
                             var valid = true
                             if (email.isBlank()) {
-                                emailError = "Email is required"
-                                valid = false
+                                emailError = "Email is required"; valid = false
                             }
                             if (password.isBlank()) {
-                                passwordError = "Password is required"
-                                valid = false
+                                passwordError = "Password is required"; valid = false
                             }
                             if (password != confirmPassword) {
-                                confirmError = "Passwords do not match"
-                                valid = false
+                                confirmError = "Passwords do not match"; valid = false
                             }
                             if (valid) viewModel.signUp(email.trim(), password, selectedRole)
                         },
                         enabled = !isLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         if (isLoading) {
@@ -294,16 +306,11 @@ fun SignupScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "Creating account…",
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Text("Creating account…", style = MaterialTheme.typography.titleMedium)
                         } else {
-                            Text(
-                                text = "Create Account",
+                            Text("Create Account",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                                fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -320,7 +327,6 @@ fun SignupScreen(
 
             Spacer(Modifier.height(20.dp))
 
-            // ── Back to Login hint ────────────────────────────────────────
             Text(
                 text = "Already have an account? Use the back button to sign in.",
                 color = AuthOnNavyMuted,
@@ -345,7 +351,6 @@ private fun SignupRoleSelector(
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -366,16 +371,13 @@ private fun SignupRoleSelector(
                                 indication = LocalIndication.current
                             ) { onRoleSelected(role) },
                         shape = RoundedCornerShape(9.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.surface
-                                else Color.Transparent,
+                        color = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
                         shadowElevation = if (isSelected) 2.dp else 0.dp,
                         tonalElevation = if (isSelected) 2.dp else 0.dp
                     ) {
                         Text(
                             text = role,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,

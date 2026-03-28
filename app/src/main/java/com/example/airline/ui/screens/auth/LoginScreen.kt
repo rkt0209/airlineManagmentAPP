@@ -22,10 +22,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material.icons.filled.Flight
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -60,12 +62,12 @@ import androidx.core.view.WindowCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 
 // Auth-specific palette — hardcoded so dynamic color on Android 12+ cannot override it
-private val AuthNavyTop    = Color(0xFF0B1B3A)
-private val AuthNavyMid    = Color(0xFF0D2247)
-private val AuthNavyBottom = Color(0xFF071226)
-private val AuthOnNavy     = Color(0xFFEAF2FF)
+private val AuthNavyTop     = Color(0xFF0B1B3A)
+private val AuthNavyMid     = Color(0xFF0D2247)
+private val AuthNavyBottom  = Color(0xFF071226)
+private val AuthOnNavy      = Color(0xFFEAF2FF)
 private val AuthOnNavyMuted = Color(0xFF8BAFD4)
-private val AuthAccent     = Color(0xFF1E88E5)
+private val AuthAccent      = Color(0xFF1E88E5)
 
 @Composable
 fun LoginScreen(
@@ -81,11 +83,13 @@ fun LoginScreen(
     var showPassword  by rememberSaveable { mutableStateOf(false) }
     var selectedRole  by rememberSaveable { mutableStateOf("Passenger") }
 
-    val uiState by viewModel.uiState.collectAsState()
+    // Holds the message shown in the error AlertDialog; null = dialog hidden
+    var dialogError   by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val uiState  by viewModel.uiState.collectAsState()
     val isLoading = uiState is AuthUiState.Loading
     val isSuccess = uiState is AuthUiState.Success
 
-    // Navigate on success; show API error inline
     LaunchedEffect(uiState) {
         when (val state = uiState) {
             is AuthUiState.Success -> {
@@ -93,10 +97,33 @@ fun LoginScreen(
                 viewModel.resetState()
             }
             is AuthUiState.Error -> {
-                emailError = state.message
+                dialogError = state.message
+                viewModel.resetState()
             }
             else -> {}
         }
+    }
+
+    // Error AlertDialog
+    if (dialogError != null) {
+        AlertDialog(
+            onDismissRequest = { dialogError = null },
+            icon = {
+                Icon(
+                    imageVector = Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.error
+                )
+            },
+            title = { Text("Sign In Failed") },
+            text  = { Text(dialogError ?: "") },
+            confirmButton = {
+                TextButton(onClick = { dialogError = null }) {
+                    Text("OK", fontWeight = FontWeight.SemiBold)
+                }
+            },
+            shape = RoundedCornerShape(20.dp)
+        )
     }
 
     // Pin status bar to navy regardless of dynamic color / current theme
@@ -112,9 +139,7 @@ fun LoginScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(listOf(AuthNavyTop, AuthNavyMid, AuthNavyBottom))
-            )
+            .background(Brush.verticalGradient(listOf(AuthNavyTop, AuthNavyMid, AuthNavyBottom)))
     ) {
         Column(
             modifier = Modifier
@@ -194,11 +219,8 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Email address") },
                         leadingIcon = {
-                            Icon(
-                                Icons.Filled.Email,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Filled.Email, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         },
                         isError = emailError != null,
                         supportingText = { if (emailError != null) Text(emailError!!) },
@@ -212,11 +234,8 @@ fun LoginScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Password") },
                         leadingIcon = {
-                            Icon(
-                                Icons.Filled.Lock,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.primary
-                            )
+                            Icon(Icons.Filled.Lock, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary)
                         },
                         trailingIcon = {
                             IconButton(onClick = { showPassword = !showPassword }) {
@@ -248,19 +267,15 @@ fun LoginScreen(
                             if (isLoading) return@Button
                             var valid = true
                             if (email.isBlank()) {
-                                emailError = "Email is required"
-                                valid = false
+                                emailError = "Email is required"; valid = false
                             }
                             if (password.isBlank()) {
-                                passwordError = "Password is required"
-                                valid = false
+                                passwordError = "Password is required"; valid = false
                             }
                             if (valid) viewModel.signIn(email.trim(), password, selectedRole)
                         },
                         enabled = !isLoading,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape = RoundedCornerShape(14.dp)
                     ) {
                         if (isLoading) {
@@ -270,16 +285,11 @@ fun LoginScreen(
                                 strokeWidth = 2.dp
                             )
                             Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = "Signing in…",
-                                style = MaterialTheme.typography.titleMedium
-                            )
+                            Text("Signing in…", style = MaterialTheme.typography.titleMedium)
                         } else {
-                            Text(
-                                text = "Sign In",
+                            Text("Sign In",
                                 style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                                fontWeight = FontWeight.SemiBold)
                         }
                     }
 
@@ -332,8 +342,6 @@ private fun AuthRoleSelector(
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
-        // Pill segmented control
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -354,16 +362,13 @@ private fun AuthRoleSelector(
                                 indication = LocalIndication.current
                             ) { onRoleSelected(role) },
                         shape = RoundedCornerShape(9.dp),
-                        color = if (isSelected) MaterialTheme.colorScheme.surface
-                                else Color.Transparent,
+                        color = if (isSelected) MaterialTheme.colorScheme.surface else Color.Transparent,
                         shadowElevation = if (isSelected) 2.dp else 0.dp,
                         tonalElevation = if (isSelected) 2.dp else 0.dp
                     ) {
                         Text(
                             text = role,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 10.dp),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
                             textAlign = TextAlign.Center,
                             style = MaterialTheme.typography.labelLarge,
                             fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
