@@ -1,6 +1,5 @@
 package com.example.airline.ui.screens.admin
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,7 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -22,6 +21,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -29,43 +29,67 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.airline.data.remote.CityItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminCitiesScreen(
     onBack: () -> Unit,
     showBackButton: Boolean = true,
-    outerPadding: PaddingValues = PaddingValues()
+    outerPadding: PaddingValues = PaddingValues(),
+    viewModel: AdminCitiesViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
-    val cities = remember {
-        mutableStateListOf("Delhi", "Mumbai", "Bangalore", "Hyderabad", "Kolkata")
-    }
+    val cities     by viewModel.cities.collectAsState()
+    val isLoading  by viewModel.isLoading.collectAsState()
+    val errorMsg   by viewModel.errorMessage.collectAsState()
+
     var showAddDialog by remember { mutableStateOf(false) }
     var newCity       by remember { mutableStateOf("") }
     var cityError     by remember { mutableStateOf(false) }
 
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(errorMsg) {
+        errorMsg?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+
     Scaffold(
         modifier            = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData      = data,
+                    containerColor    = MaterialTheme.colorScheme.errorContainer,
+                    contentColor      = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -119,22 +143,21 @@ fun AdminCitiesScreen(
                     )
                 )
         ) {
-            LazyColumn(
-                modifier            = Modifier.fillMaxSize(),
-                contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                itemsIndexed(cities) { index, city ->
-                    CityCard(
-                        city   = city,
-                        cityId = index + 1,
-                        onEdit = {
-                            Toast.makeText(context, "Edit $city", Toast.LENGTH_SHORT).show()
-                        },
-                        onDelete = {
-                            Toast.makeText(context, "Delete $city", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+            if (isLoading && cities.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                LazyColumn(
+                    modifier            = Modifier.fillMaxSize(),
+                    contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(cities, key = { it.id }) { city ->
+                        CityCard(
+                            city     = city,
+                            onEdit   = { /* Edit not yet implemented */ },
+                            onDelete = { viewModel.deleteCity(city.id) }
+                        )
+                    }
                 }
             }
         }
@@ -184,7 +207,6 @@ fun AdminCitiesScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     CityFormSectionLabel("CITY DETAILS")
 
-                    // name — required, mirrors City.name in DB schema
                     OutlinedTextField(
                         value         = newCity,
                         onValueChange = { newCity = it; cityError = false },
@@ -218,8 +240,7 @@ fun AdminCitiesScreen(
                             cityError = true
                             return@TextButton
                         }
-                        cities.add(trimmed)
-                        Toast.makeText(context, "$trimmed added", Toast.LENGTH_SHORT).show()
+                        viewModel.addCity(trimmed)
                         newCity = ""; cityError = false; showAddDialog = false
                     }
                 ) {
@@ -242,8 +263,7 @@ fun AdminCitiesScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun CityCard(
-    city:     String,
-    cityId:   Int,
+    city:     CityItem,
     onEdit:   () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -260,7 +280,6 @@ private fun CityCard(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // City icon circle
             Surface(
                 shape    = CircleShape,
                 color    = MaterialTheme.colorScheme.primaryContainer,
@@ -276,22 +295,20 @@ private fun CityCard(
                 }
             }
 
-            // City name + ID
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text       = city,
+                    text       = city.name,
                     style      = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color      = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text  = "City ID #$cityId",
+                    text  = "City ID #${city.id}",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
-            // Edit / Delete
             IconButton(onClick = onEdit) {
                 Icon(
                     imageVector        = Icons.Filled.Edit,
@@ -310,7 +327,6 @@ private fun CityCard(
     }
 }
 
-// ─── Form section label ───────────────────────────────────────────────────────
 @Composable
 private fun CityFormSectionLabel(text: String) {
     Text(

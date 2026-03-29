@@ -1,6 +1,5 @@
 package com.example.airline.ui.screens.admin
 
-import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -33,6 +32,7 @@ import androidx.compose.material.icons.filled.MeetingRoom
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -44,14 +44,18 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -61,24 +65,19 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.airline.data.remote.AirplaneItem
+import com.example.airline.data.remote.AirportItem
+import com.example.airline.data.remote.FlightItem
 import java.text.NumberFormat
 import java.util.Locale
 
-// Mirrors the Flights Sequelize model exactly:
-//   flightNumber (STRING, unique, not null)
-//   airplaneId   (INTEGER, not null)  → shown as airplaneModel for readability
-//   departureAirportId (INTEGER, not null) → shown as airport name
-//   arrivalAirportId   (INTEGER, not null) → shown as airport name
-//   departureTime (DATE, not null)
-//   arrivalTime   (DATE, not null)
-//   price         (INTEGER, not null)
-//   boardingGate  (STRING, optional)
-//   totalSeats    (INTEGER, not null) → auto-derived from airplane.capacity
+// ─── UI display model ─────────────────────────────────────────────────────────
+// Holds resolved names for display (IDs resolved against airports/airplanes lists)
 data class AdminFlightUi(
     val id: Int,
     val flightNumber: String,
@@ -92,80 +91,83 @@ data class AdminFlightUi(
     val totalSeats: Int
 )
 
-// Airplane option: model name → capacity (used to auto-set totalSeats)
-private data class AirplaneOption(val modelNumber: String, val capacity: Int)
-
-// Airport option: display name → IATA code
-private data class AirportOption(val displayName: String, val code: String)
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminFlightsScreen(
-    outerPadding: PaddingValues = PaddingValues()
+    outerPadding: PaddingValues = PaddingValues(),
+    viewModel: AdminFlightsViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
+    val flightItems   by viewModel.flights.collectAsState()
+    val airportItems  by viewModel.airports.collectAsState()
+    val airplaneItems by viewModel.airplanes.collectAsState()
+    val isLoading     by viewModel.isLoading.collectAsState()
+    val errorMsg      by viewModel.errorMessage.collectAsState()
 
-    // Mirrors the Airplanes seeder data — model number + capacity
-    val airplaneOptions = remember {
-        listOf(
-            AirplaneOption("Boeing 777",  400),
-            AirplaneOption("Airbus A320", 350),
-            AirplaneOption("Boeing 747",  320),
-            AirplaneOption("Boeing 77",   300),
-            AirplaneOption("Airbus 330",  150)
-        )
+    // Resolve IDs to display names for each flight
+    val flights = remember(flightItems, airportItems, airplaneItems) {
+        flightItems.map { f ->
+            AdminFlightUi(
+                id               = f.id,
+                flightNumber     = f.flightNumber,
+                airplaneModel    = airplaneItems.find { it.id == f.airplaneId }?.modelNumber
+                    ?: "#${f.airplaneId}",
+                departureAirport = airportItems.find { it.id == f.departureAirportId }?.name
+                    ?: "#${f.departureAirportId}",
+                arrivalAirport   = airportItems.find { it.id == f.arrivalAirportId }?.name
+                    ?: "#${f.arrivalAirportId}",
+                departureTime    = f.departureTime,
+                arrivalTime      = f.arrivalTime,
+                price            = f.price,
+                boardingGate     = f.boardingGate ?: "",
+                totalSeats       = f.totalSeats
+            )
+        }
     }
 
-    // Mirrors the Airports seeder data
-    val airportOptions = remember {
-        listOf(
-            AirportOption("Indira Gandhi Intl (DEL)",                  "DEL"),
-            AirportOption("Chhatrapati Shivaji Intl (BOM)",            "BOM"),
-            AirportOption("Kempegowda Intl (BLR)",                     "BLR"),
-            AirportOption("Rajiv Gandhi Intl (HYD)",                   "HYD"),
-            AirportOption("Netaji Subhas Chandra Bose Intl (CCU)",     "CCU")
-        )
-    }
+    // Add-dialog state
+    var showAddDialog     by remember { mutableStateOf(false) }
+    var newFlightNumber   by remember { mutableStateOf("") }
+    var selectedAirplaneId  by remember { mutableStateOf<Int?>(null) }
+    var airplaneExpanded    by remember { mutableStateOf(false) }
+    var selectedDepartureId by remember { mutableStateOf<Int?>(null) }
+    var departureExpanded   by remember { mutableStateOf(false) }
+    var selectedArrivalId   by remember { mutableStateOf<Int?>(null) }
+    var arrivalExpanded     by remember { mutableStateOf(false) }
+    var newDepartureTime    by remember { mutableStateOf("") }
+    var newArrivalTime      by remember { mutableStateOf("") }
+    var newPrice            by remember { mutableStateOf("") }
+    var newBoardingGate     by remember { mutableStateOf("") }
+    var flightNumberError   by remember { mutableStateOf(false) }
 
-    // Mock flights — all fields match the Flights migration columns
-    val flights = remember {
-        mutableStateListOf(
-            AdminFlightUi(1, "FL-101", "Boeing 777",
-                "Indira Gandhi Intl (DEL)", "Chhatrapati Shivaji Intl (BOM)",
-                "2024-01-15 06:00", "2024-01-15 08:15", 4999, "A3", 400),
-            AdminFlightUi(2, "FL-202", "Airbus A320",
-                "Chhatrapati Shivaji Intl (BOM)", "Kempegowda Intl (BLR)",
-                "2024-01-15 09:30", "2024-01-15 11:00", 3500, "B1", 350),
-            AdminFlightUi(3, "FL-303", "Boeing 747",
-                "Rajiv Gandhi Intl (HYD)", "Indira Gandhi Intl (DEL)",
-                "2024-01-15 12:00", "2024-01-15 14:30", 5200, "C2", 320),
-            AdminFlightUi(4, "FL-404", "Airbus 330",
-                "Kempegowda Intl (BLR)", "Netaji Subhas Chandra Bose Intl (CCU)",
-                "2024-01-15 07:15", "2024-01-15 10:45", 6100, "D4", 150),
-            AdminFlightUi(5, "FL-505", "Boeing 77",
-                "Netaji Subhas Chandra Bose Intl (CCU)", "Rajiv Gandhi Intl (HYD)",
-                "2024-01-15 15:00", "2024-01-15 17:30", 4200, "A7", 300)
-        )
-    }
+    // Resolve selected items (default to first in list)
+    val selectedAirplane  = airplaneItems.find { it.id == selectedAirplaneId }
+        ?: airplaneItems.firstOrNull()
+    val selectedDeparture = airportItems.find { it.id == selectedDepartureId }
+        ?: airportItems.firstOrNull()
+    val selectedArrival   = airportItems.find { it.id == selectedArrivalId }
+        ?: airportItems.drop(1).firstOrNull() ?: airportItems.firstOrNull()
 
-    // Add-dialog field states
-    var showAddDialog      by remember { mutableStateOf(false) }
-    var newFlightNumber    by remember { mutableStateOf("") }
-    var selectedAirplane   by remember { mutableStateOf(airplaneOptions.first()) }
-    var airplaneExpanded   by remember { mutableStateOf(false) }
-    var selectedDeparture  by remember { mutableStateOf(airportOptions.first()) }
-    var departureExpanded  by remember { mutableStateOf(false) }
-    var selectedArrival    by remember { mutableStateOf(airportOptions[1]) }
-    var arrivalExpanded    by remember { mutableStateOf(false) }
-    var newDepartureTime   by remember { mutableStateOf("") }
-    var newArrivalTime     by remember { mutableStateOf("") }
-    var newPrice           by remember { mutableStateOf("") }
-    var newBoardingGate    by remember { mutableStateOf("") }
-    var flightNumberError  by remember { mutableStateOf(false) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(errorMsg) {
+        errorMsg?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
 
     Scaffold(
         modifier            = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData   = data,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor   = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -214,21 +216,21 @@ fun AdminFlightsScreen(
                     )
                 )
         ) {
-            LazyColumn(
-                modifier            = Modifier.fillMaxSize(),
-                contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(flights) { flight ->
-                    FlightDashboardCard(
-                        flight   = flight,
-                        onEdit   = {
-                            Toast.makeText(context, "Edit ${flight.flightNumber}", Toast.LENGTH_SHORT).show()
-                        },
-                        onDelete = {
-                            Toast.makeText(context, "Delete ${flight.flightNumber}", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+            if (isLoading && flights.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                LazyColumn(
+                    modifier            = Modifier.fillMaxSize(),
+                    contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(flights, key = { it.id }) { flight ->
+                        FlightDashboardCard(
+                            flight   = flight,
+                            onEdit   = { /* Edit not yet implemented */ },
+                            onDelete = { viewModel.deleteFlight(flight.id) }
+                        )
+                    }
                 }
             }
         }
@@ -239,10 +241,10 @@ fun AdminFlightsScreen(
         val resetDialog: () -> Unit = {
             newFlightNumber = ""; newDepartureTime = ""; newArrivalTime = ""
             newPrice = ""; newBoardingGate = ""; flightNumberError = false
-            selectedAirplane  = airplaneOptions.first()
-            selectedDeparture = airportOptions.first()
-            selectedArrival   = airportOptions[1]
-            showAddDialog     = false
+            selectedAirplaneId  = null
+            selectedDepartureId = null
+            selectedArrivalId   = null
+            showAddDialog       = false
         }
 
         AlertDialog(
@@ -290,7 +292,6 @@ fun AdminFlightsScreen(
                     // ── FLIGHT INFO ─────────────────────────────────────────
                     FlightFormSectionLabel("FLIGHT INFO")
 
-                    // flightNumber — required, unique
                     OutlinedTextField(
                         value         = newFlightNumber,
                         onValueChange = { newFlightNumber = it; flightNumberError = false },
@@ -318,9 +319,8 @@ fun AdminFlightsScreen(
                     // ── AIRCRAFT ────────────────────────────────────────────
                     FlightFormSectionLabel("AIRCRAFT")
 
-                    // airplaneId — required FK dropdown from Airplanes table
                     ExposedDropdownMenuBox(
-                        expanded        = airplaneExpanded,
+                        expanded         = airplaneExpanded,
                         onExpandedChange = { airplaneExpanded = !airplaneExpanded }
                     ) {
                         OutlinedTextField(
@@ -328,7 +328,9 @@ fun AdminFlightsScreen(
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth(),
                             readOnly      = true,
-                            value         = "${selectedAirplane.modelNumber} (${selectedAirplane.capacity} seats)",
+                            value         = selectedAirplane
+                                ?.let { "${it.modelNumber} (${it.capacity} seats)" }
+                                ?: if (airplaneItems.isEmpty()) "Loading…" else "Select airplane",
                             onValueChange = {},
                             label         = { Text("Airplane *") },
                             leadingIcon   = {
@@ -344,25 +346,24 @@ fun AdminFlightsScreen(
                             shape         = RoundedCornerShape(14.dp)
                         )
                         ExposedDropdownMenu(
-                            expanded        = airplaneExpanded,
+                            expanded         = airplaneExpanded,
                             onDismissRequest = { airplaneExpanded = false }
                         ) {
-                            airplaneOptions.forEach { opt ->
+                            airplaneItems.forEach { opt ->
                                 DropdownMenuItem(
                                     text    = { Text("${opt.modelNumber} · ${opt.capacity} seats") },
-                                    onClick = { selectedAirplane = opt; airplaneExpanded = false }
+                                    onClick = { selectedAirplaneId = opt.id; airplaneExpanded = false }
                                 )
                             }
                         }
                     }
 
-                    // totalSeats info chip — auto-derived from airplane capacity
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
                     ) {
                         Text(
-                            text     = "ℹ  totalSeats auto-set to ${selectedAirplane.capacity} from selected airplane",
+                            text     = "ℹ  totalSeats auto-set to ${selectedAirplane?.capacity ?: "—"} from selected airplane",
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 12.dp, vertical = 8.dp),
@@ -374,9 +375,8 @@ fun AdminFlightsScreen(
                     // ── ROUTE ───────────────────────────────────────────────
                     FlightFormSectionLabel("ROUTE")
 
-                    // departureAirportId — required FK dropdown
                     ExposedDropdownMenuBox(
-                        expanded        = departureExpanded,
+                        expanded         = departureExpanded,
                         onExpandedChange = { departureExpanded = !departureExpanded }
                     ) {
                         OutlinedTextField(
@@ -384,7 +384,8 @@ fun AdminFlightsScreen(
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth(),
                             readOnly      = true,
-                            value         = selectedDeparture.displayName,
+                            value         = selectedDeparture?.name
+                                ?: if (airportItems.isEmpty()) "Loading…" else "Select airport",
                             onValueChange = {},
                             label         = { Text("Departure Airport *") },
                             leadingIcon   = {
@@ -400,21 +401,20 @@ fun AdminFlightsScreen(
                             shape         = RoundedCornerShape(14.dp)
                         )
                         ExposedDropdownMenu(
-                            expanded        = departureExpanded,
+                            expanded         = departureExpanded,
                             onDismissRequest = { departureExpanded = false }
                         ) {
-                            airportOptions.forEach { opt ->
+                            airportItems.forEach { opt ->
                                 DropdownMenuItem(
-                                    text    = { Text(opt.displayName) },
-                                    onClick = { selectedDeparture = opt; departureExpanded = false }
+                                    text    = { Text(opt.name) },
+                                    onClick = { selectedDepartureId = opt.id; departureExpanded = false }
                                 )
                             }
                         }
                     }
 
-                    // arrivalAirportId — required FK dropdown
                     ExposedDropdownMenuBox(
-                        expanded        = arrivalExpanded,
+                        expanded         = arrivalExpanded,
                         onExpandedChange = { arrivalExpanded = !arrivalExpanded }
                     ) {
                         OutlinedTextField(
@@ -422,7 +422,8 @@ fun AdminFlightsScreen(
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth(),
                             readOnly      = true,
-                            value         = selectedArrival.displayName,
+                            value         = selectedArrival?.name
+                                ?: if (airportItems.isEmpty()) "Loading…" else "Select airport",
                             onValueChange = {},
                             label         = { Text("Arrival Airport *") },
                             leadingIcon   = {
@@ -438,13 +439,13 @@ fun AdminFlightsScreen(
                             shape         = RoundedCornerShape(14.dp)
                         )
                         ExposedDropdownMenu(
-                            expanded        = arrivalExpanded,
+                            expanded         = arrivalExpanded,
                             onDismissRequest = { arrivalExpanded = false }
                         ) {
-                            airportOptions.forEach { opt ->
+                            airportItems.forEach { opt ->
                                 DropdownMenuItem(
-                                    text    = { Text(opt.displayName) },
-                                    onClick = { selectedArrival = opt; arrivalExpanded = false }
+                                    text    = { Text(opt.name) },
+                                    onClick = { selectedArrivalId = opt.id; arrivalExpanded = false }
                                 )
                             }
                         }
@@ -453,7 +454,6 @@ fun AdminFlightsScreen(
                     // ── SCHEDULE ────────────────────────────────────────────
                     FlightFormSectionLabel("SCHEDULE")
 
-                    // departureTime — required DATE field
                     OutlinedTextField(
                         value         = newDepartureTime,
                         onValueChange = { newDepartureTime = it },
@@ -471,7 +471,6 @@ fun AdminFlightsScreen(
                         shape         = RoundedCornerShape(14.dp)
                     )
 
-                    // arrivalTime — required DATE field
                     OutlinedTextField(
                         value         = newArrivalTime,
                         onValueChange = { newArrivalTime = it },
@@ -492,7 +491,6 @@ fun AdminFlightsScreen(
                     // ── PRICING & GATE ──────────────────────────────────────
                     FlightFormSectionLabel("PRICING & GATE")
 
-                    // price — required INTEGER (in rupees)
                     OutlinedTextField(
                         value         = newPrice,
                         onValueChange = { newPrice = it.filter { c -> c.isDigit() } },
@@ -511,7 +509,6 @@ fun AdminFlightsScreen(
                         shape           = RoundedCornerShape(14.dp)
                     )
 
-                    // boardingGate — optional STRING
                     OutlinedTextField(
                         value         = newBoardingGate,
                         onValueChange = { newBoardingGate = it },
@@ -534,28 +531,27 @@ fun AdminFlightsScreen(
                 TextButton(
                     onClick = {
                         val number = newFlightNumber.trim()
-                        if (number.isEmpty()) {
-                            flightNumberError = true
+                        if (number.isEmpty()) { flightNumberError = true; return@TextButton }
+
+                        val airplane  = selectedAirplane  ?: return@TextButton
+                        val departure = selectedDeparture ?: return@TextButton
+                        val arrival   = selectedArrival   ?: return@TextButton
+                        val price     = newPrice.toIntOrNull() ?: 0
+
+                        if (newDepartureTime.isBlank() || newArrivalTime.isBlank() || price <= 0) {
                             return@TextButton
                         }
-                        val price = newPrice.toIntOrNull() ?: 0
-                        if (newDepartureTime.isNotBlank() && newArrivalTime.isNotBlank() && price > 0) {
-                            flights.add(
-                                AdminFlightUi(
-                                    id               = flights.size + 1,
-                                    flightNumber     = number,
-                                    airplaneModel    = selectedAirplane.modelNumber,
-                                    departureAirport = selectedDeparture.displayName,
-                                    arrivalAirport   = selectedArrival.displayName,
-                                    departureTime    = newDepartureTime,
-                                    arrivalTime      = newArrivalTime,
-                                    price            = price,
-                                    boardingGate     = newBoardingGate.trim(),
-                                    totalSeats       = selectedAirplane.capacity
-                                )
-                            )
-                            Toast.makeText(context, "Flight $number added", Toast.LENGTH_SHORT).show()
-                        }
+
+                        viewModel.addFlight(
+                            flightNumber       = number,
+                            airplaneId         = airplane.id,
+                            departureAirportId = departure.id,
+                            arrivalAirportId   = arrival.id,
+                            departureTime      = newDepartureTime,
+                            arrivalTime        = newArrivalTime,
+                            price              = price,
+                            boardingGate       = newBoardingGate.trim()
+                        )
                         resetDialog()
                     }
                 ) {
@@ -573,14 +569,6 @@ fun AdminFlightsScreen(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Premium flight dashboard card
-// Layout:
-//   ┌─────────────────────────────────────────────────────────────────────────┐
-//   │  [FL-101]  Boeing 777                              [Gate A3]            │
-//   │  DEL   ─ ─ ─ ✈ ─ ─ ─   BOM                                            │
-//   │  06:00                  08:15                                           │
-//   ├─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─┤
-//   │  ₹4,999 / seat                    400 seats    [✏]  [🗑]               │
-//   └─────────────────────────────────────────────────────────────────────────┘
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun FlightDashboardCard(
@@ -588,8 +576,8 @@ private fun FlightDashboardCard(
     onEdit:   () -> Unit,
     onDelete: () -> Unit
 ) {
-    val depCode = extractCode(flight.departureAirport)
-    val arrCode = extractCode(flight.arrivalAirport)
+    val depCode = abbreviateAirport(flight.departureAirport)
+    val arrCode = abbreviateAirport(flight.arrivalAirport)
     val depTime = extractTime(flight.departureTime)
     val arrTime = extractTime(flight.arrivalTime)
 
@@ -649,12 +637,11 @@ private fun FlightDashboardCard(
                 }
             }
 
-            // ── Route: DEL ─── ✈ ─── BOM with times ──
+            // ── Route: DEP ─── ✈ ─── ARR ──
             Row(
                 modifier          = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Departure code + time
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text       = depCode,
@@ -669,7 +656,6 @@ private fun FlightDashboardCard(
                     )
                 }
 
-                // Flight path line
                 Row(
                     modifier          = Modifier
                         .weight(1f)
@@ -686,7 +672,6 @@ private fun FlightDashboardCard(
                     AdminDashLine(modifier = Modifier.weight(1f))
                 }
 
-                // Arrival code + time
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
                         text       = arrCode,
@@ -794,7 +779,6 @@ private fun AdminDashLine(modifier: Modifier = Modifier) {
     }
 }
 
-// ─── Section label for dialog form ───────────────────────────────────────────
 @Composable
 private fun FlightFormSectionLabel(text: String) {
     Text(
@@ -808,13 +792,28 @@ private fun FlightFormSectionLabel(text: String) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Extracts IATA code from "Airport Name (XXX)" → "XXX" */
-private fun extractCode(airportName: String): String =
-    airportName.substringAfterLast("(").trimEnd(')')
+/**
+ * Produces a 3-letter airport abbreviation for the card route display.
+ * Prefers an inline code like "Airport Name (DEL)" → "DEL".
+ * Falls back to the first 3 uppercase letters of the name.
+ */
+private fun abbreviateAirport(name: String): String {
+    val inParens = name.substringAfterLast("(", "").trimEnd(')')
+    return if (inParens.length in 2..4) inParens.uppercase()
+    else name.filter { it.isLetter() }.take(3).uppercase().ifEmpty { "???" }
+}
 
-/** Extracts time portion from "yyyy-MM-dd HH:mm" → "HH:mm" */
-private fun extractTime(dateTime: String): String =
-    if (dateTime.contains(" ")) dateTime.substringAfter(" ") else dateTime
+/**
+ * Extracts the HH:mm time portion from either:
+ *  - ISO-8601  "2024-01-15T06:00:00.000Z" → "06:00"
+ *  - Local     "2024-01-15 06:00"          → "06:00"
+ *  - Time-only "06:00"                     → "06:00"
+ */
+private fun extractTime(dateTime: String): String = when {
+    dateTime.contains('T') -> dateTime.substring(11, minOf(16, dateTime.length))
+    dateTime.contains(' ') -> dateTime.substringAfter(' ').take(5)
+    else                   -> dateTime.take(5)
+}
 
 private fun formatFlightCurrency(amount: Int): String {
     val fmt = NumberFormat.getNumberInstance(Locale("en", "IN"))

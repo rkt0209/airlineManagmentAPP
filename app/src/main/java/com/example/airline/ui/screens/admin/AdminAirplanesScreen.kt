@@ -1,17 +1,14 @@
 package com.example.airline.ui.screens.admin
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
@@ -26,68 +23,78 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.airline.data.remote.AirplaneItem
 
-// Mirrors the Airplane Sequelize model:
-//   modelNumber (STRING, not null), capacity (INTEGER, not null, default 200)
-data class AirplaneUi(
-    val id: Int,
-    val modelNumber: String,
-    val capacity: Int
-)
+// UI display alias — keeps card composable signature stable
+typealias AirplaneUi = AirplaneItem
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminAirplanesScreen(
-    outerPadding: PaddingValues = PaddingValues()
+    outerPadding: PaddingValues = PaddingValues(),
+    viewModel: AdminAirplanesViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
+    val airplanes  by viewModel.airplanes.collectAsState()
+    val isLoading  by viewModel.isLoading.collectAsState()
+    val errorMsg   by viewModel.errorMessage.collectAsState()
 
-    // Mock data sourced directly from the Airplanes seeder file
-    val airplanes = remember {
-        mutableStateListOf(
-            AirplaneUi(1, "Boeing 777",  400),
-            AirplaneUi(2, "Airbus A320", 350),
-            AirplaneUi(3, "Boeing 747",  320),
-            AirplaneUi(4, "Boeing 77",   300),
-            AirplaneUi(5, "Airbus 330",  150)
-        )
+    var showAddDialog  by remember { mutableStateOf(false) }
+    var newModelNumber by remember { mutableStateOf("") }
+    var newCapacity    by remember { mutableStateOf("200") }
+    var modelError     by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(errorMsg) {
+        errorMsg?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
     }
-
-    var showAddDialog   by remember { mutableStateOf(false) }
-    var newModelNumber  by remember { mutableStateOf("") }
-    var newCapacity     by remember { mutableStateOf("200") }
-    var modelError      by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier            = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData   = data,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor   = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -136,21 +143,21 @@ fun AdminAirplanesScreen(
                     )
                 )
         ) {
-            LazyColumn(
-                modifier       = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(airplanes) { airplane ->
-                    AirplaneCard(
-                        airplane  = airplane,
-                        onEdit    = {
-                            Toast.makeText(context, "Edit ${airplane.modelNumber}", Toast.LENGTH_SHORT).show()
-                        },
-                        onDelete  = {
-                            Toast.makeText(context, "Delete ${airplane.modelNumber}", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+            if (isLoading && airplanes.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                LazyColumn(
+                    modifier       = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(airplanes, key = { it.id }) { airplane ->
+                        AirplaneCard(
+                            airplane  = airplane,
+                            onEdit    = { /* Edit not yet implemented */ },
+                            onDelete  = { viewModel.deleteAirplane(airplane.id) }
+                        )
+                    }
                 }
             }
         }
@@ -200,10 +207,8 @@ fun AdminAirplanesScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
 
-                    // ── Section label ────────────────────────────────────────
                     FormSectionLabel("AIRCRAFT DETAILS")
 
-                    // modelNumber — required, e.g. "Boeing 777"
                     OutlinedTextField(
                         value         = newModelNumber,
                         onValueChange = { newModelNumber = it; modelError = false },
@@ -228,7 +233,6 @@ fun AdminAirplanesScreen(
                         shape         = RoundedCornerShape(14.dp)
                     )
 
-                    // capacity — required, integer, default 200
                     OutlinedTextField(
                         value         = newCapacity,
                         onValueChange = { newCapacity = it.filter { c -> c.isDigit() } },
@@ -247,7 +251,6 @@ fun AdminAirplanesScreen(
                         shape          = RoundedCornerShape(14.dp)
                     )
 
-                    // Info chip: totalSeats auto-derived from capacity
                     Surface(
                         shape = RoundedCornerShape(10.dp),
                         color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -272,14 +275,7 @@ fun AdminAirplanesScreen(
                             return@TextButton
                         }
                         val cap = newCapacity.toIntOrNull() ?: 200
-                        airplanes.add(
-                            AirplaneUi(
-                                id          = airplanes.size + 1,
-                                modelNumber = trimmed,
-                                capacity    = cap
-                            )
-                        )
-                        Toast.makeText(context, "${trimmed} added", Toast.LENGTH_SHORT).show()
+                        viewModel.addAirplane(trimmed, cap)
                         newModelNumber = ""; newCapacity = "200"; modelError = false
                         showAddDialog = false
                     }
@@ -306,7 +302,7 @@ fun AdminAirplanesScreen(
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun AirplaneCard(
-    airplane: AirplaneUi,
+    airplane: AirplaneItem,
     onEdit:   () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -323,7 +319,6 @@ private fun AirplaneCard(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Airplane icon circle
             Surface(
                 shape    = CircleShape,
                 color    = MaterialTheme.colorScheme.primaryContainer,
@@ -339,7 +334,6 @@ private fun AirplaneCard(
                 }
             }
 
-            // Model + ID
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text       = airplane.modelNumber,
@@ -354,21 +348,19 @@ private fun AirplaneCard(
                 )
             }
 
-            // Capacity pill
             Surface(
                 shape = RoundedCornerShape(999.dp),
                 color = MaterialTheme.colorScheme.primaryContainer
             ) {
                 Text(
-                    text     = "${airplane.capacity} seats",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-                    style    = MaterialTheme.typography.labelMedium,
+                    text       = "${airplane.capacity} seats",
+                    modifier   = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+                    style      = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color    = MaterialTheme.colorScheme.onPrimaryContainer
+                    color      = MaterialTheme.colorScheme.onPrimaryContainer
                 )
             }
 
-            // Edit / Delete
             IconButton(onClick = onEdit) {
                 Icon(
                     imageVector        = Icons.Filled.Edit,
@@ -387,7 +379,6 @@ private fun AirplaneCard(
     }
 }
 
-// ─── Shared form helper ───────────────────────────────────────────────────────
 @Composable
 private fun FormSectionLabel(text: String) {
     Text(

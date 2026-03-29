@@ -1,5 +1,6 @@
 package com.example.airline.core.network
 
+import com.example.airline.data.remote.AdminApi
 import com.example.airline.data.remote.AuthApi
 import dagger.Module
 import dagger.Provides
@@ -50,4 +51,9 @@ object NetworkModule {
     @Singleton
     fun provideAuthApi(retrofit: Retrofit): AuthApi =
         retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideAdminApi(retrofit: Retrofit): AdminApi =
+        retrofit.create(AdminApi::class.java)
 }

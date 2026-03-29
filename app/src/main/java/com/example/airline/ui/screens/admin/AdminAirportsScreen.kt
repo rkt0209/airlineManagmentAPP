@@ -1,6 +1,5 @@
 package com.example.airline.ui.screens.admin
 
-import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -24,6 +23,7 @@ import androidx.compose.material.icons.filled.LocationCity
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -35,64 +35,97 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.airline.data.remote.CityItem
 
-// Mirrors the Airport Sequelize model:
-//   name (STRING, not null), address (STRING, optional), cityId (INTEGER FK→Cities)
+// UI display model — resolved from AirportItem + CityItem lookup
 data class AirportUi(
     val id:       Int,
     val name:     String,
     val address:  String,
-    val cityName: String   // denormalized from City for display
+    val cityName: String
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminAirportsScreen(
-    outerPadding: PaddingValues = PaddingValues()
+    outerPadding: PaddingValues = PaddingValues(),
+    viewModel: AdminAirportsViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
+    val airportItems  by viewModel.airports.collectAsState()
+    val cityItems     by viewModel.cities.collectAsState()
+    val isLoading     by viewModel.isLoading.collectAsState()
+    val errorMsg      by viewModel.errorMessage.collectAsState()
 
-    val airports = remember {
-        mutableStateListOf(
-            AirportUi(1, "Indira Gandhi International Airport",                   "New Delhi, Delhi",       "Delhi"),
-            AirportUi(2, "Chhatrapati Shivaji Maharaj International Airport",     "Andheri East, Mumbai",   "Mumbai"),
-            AirportUi(3, "Kempegowda International Airport",                      "Devanahalli, Bengaluru", "Bangalore"),
-            AirportUi(4, "Rajiv Gandhi International Airport",                    "Shamshabad, Hyderabad",  "Hyderabad"),
-            AirportUi(5, "Netaji Subhas Chandra Bose International Airport",      "Dum Dum, Kolkata",       "Kolkata")
-        )
+    // Resolve airport display models: join AirportItem with CityItem for city name
+    val airports = remember(airportItems, cityItems) {
+        airportItems.map { item ->
+            AirportUi(
+                id       = item.id,
+                name     = item.name,
+                address  = item.address ?: "",
+                cityName = cityItems.find { it.id == item.cityId }?.name
+                    ?: "City #${item.cityId}"
+            )
+        }
     }
-
-    // Mirrors the Cities table (seeded in AdminCitiesScreen)
-    val cities = listOf("Delhi", "Mumbai", "Bangalore", "Hyderabad", "Kolkata")
 
     var showAddDialog        by remember { mutableStateOf(false) }
     var newName              by remember { mutableStateOf("") }
     var newAddress           by remember { mutableStateOf("") }
-    var selectedCity         by remember { mutableStateOf(cities.first()) }
+    var selectedCity         by remember { mutableStateOf<CityItem?>(null) }
     var cityDropdownExpanded by remember { mutableStateOf(false) }
     var nameError            by remember { mutableStateOf(false) }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    LaunchedEffect(errorMsg) {
+        errorMsg?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearError()
+        }
+    }
+
+    // Default to first city when list loads
+    LaunchedEffect(cityItems) {
+        if (selectedCity == null && cityItems.isNotEmpty()) {
+            selectedCity = cityItems.first()
+        }
+    }
 
     Scaffold(
         modifier            = Modifier.padding(bottom = outerPadding.calculateBottomPadding()),
         contentWindowInsets = WindowInsets(0),
+        snackbarHost = {
+            SnackbarHost(snackbarHostState) { data ->
+                Snackbar(
+                    snackbarData   = data,
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor   = MaterialTheme.colorScheme.onErrorContainer
+                )
+            }
+        },
         topBar = {
             TopAppBar(
                 title = {
@@ -141,21 +174,21 @@ fun AdminAirportsScreen(
                     )
                 )
         ) {
-            LazyColumn(
-                modifier            = Modifier.fillMaxSize(),
-                contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                items(airports) { airport ->
-                    AirportCard(
-                        airport  = airport,
-                        onEdit   = {
-                            Toast.makeText(context, "Edit ${airport.name}", Toast.LENGTH_SHORT).show()
-                        },
-                        onDelete = {
-                            Toast.makeText(context, "Delete ${airport.name}", Toast.LENGTH_SHORT).show()
-                        }
-                    )
+            if (isLoading && airports.isEmpty()) {
+                CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+            } else {
+                LazyColumn(
+                    modifier            = Modifier.fillMaxSize(),
+                    contentPadding      = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(airports, key = { it.id }) { airport ->
+                        AirportCard(
+                            airport  = airport,
+                            onEdit   = { /* Edit not yet implemented */ },
+                            onDelete = { viewModel.deleteAirport(airport.id) }
+                        )
+                    }
                 }
             }
         }
@@ -165,7 +198,7 @@ fun AdminAirportsScreen(
     if (showAddDialog) {
         val resetDialog: () -> Unit = {
             newName = ""; newAddress = ""; nameError = false
-            selectedCity = cities.first(); showAddDialog = false
+            selectedCity = cityItems.firstOrNull(); showAddDialog = false
         }
 
         AlertDialog(
@@ -207,10 +240,8 @@ fun AdminAirportsScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
 
-                    // ── AIRPORT DETAILS ──────────────────────────────────
                     AirportFormSectionLabel("AIRPORT DETAILS")
 
-                    // name — required, maps to Airport.name
                     OutlinedTextField(
                         value         = newName,
                         onValueChange = { newName = it; nameError = false },
@@ -235,10 +266,8 @@ fun AdminAirportsScreen(
                         shape         = RoundedCornerShape(14.dp)
                     )
 
-                    // ── LOCATION ─────────────────────────────────────────
                     AirportFormSectionLabel("LOCATION")
 
-                    // address — optional, maps to Airport.address
                     OutlinedTextField(
                         value         = newAddress,
                         onValueChange = { newAddress = it },
@@ -256,7 +285,7 @@ fun AdminAirportsScreen(
                         shape         = RoundedCornerShape(14.dp)
                     )
 
-                    // cityId — required FK, shown as city name dropdown
+                    // City dropdown — populated from ViewModel's cities list
                     ExposedDropdownMenuBox(
                         expanded         = cityDropdownExpanded,
                         onExpandedChange = { cityDropdownExpanded = !cityDropdownExpanded }
@@ -266,7 +295,7 @@ fun AdminAirportsScreen(
                                 .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                                 .fillMaxWidth(),
                             readOnly      = true,
-                            value         = selectedCity,
+                            value         = selectedCity?.name ?: if (cityItems.isEmpty()) "Loading…" else "Select city",
                             onValueChange = {},
                             label         = { Text("City (cityId) *") },
                             leadingIcon   = {
@@ -285,9 +314,9 @@ fun AdminAirportsScreen(
                             expanded         = cityDropdownExpanded,
                             onDismissRequest = { cityDropdownExpanded = false }
                         ) {
-                            cities.forEach { city ->
+                            cityItems.forEach { city ->
                                 DropdownMenuItem(
-                                    text    = { Text(city) },
+                                    text    = { Text(city.name) },
                                     onClick = { selectedCity = city; cityDropdownExpanded = false }
                                 )
                             }
@@ -299,19 +328,9 @@ fun AdminAirportsScreen(
                 TextButton(
                     onClick = {
                         val trimmed = newName.trim()
-                        if (trimmed.isEmpty()) {
-                            nameError = true
-                            return@TextButton
-                        }
-                        airports.add(
-                            AirportUi(
-                                id       = airports.size + 1,
-                                name     = trimmed,
-                                address  = newAddress.trim(),
-                                cityName = selectedCity
-                            )
-                        )
-                        Toast.makeText(context, "$trimmed added", Toast.LENGTH_SHORT).show()
+                        if (trimmed.isEmpty()) { nameError = true; return@TextButton }
+                        val city = selectedCity ?: return@TextButton
+                        viewModel.addAirport(trimmed, newAddress.trim(), city.id)
                         resetDialog()
                     }
                 ) {
@@ -347,7 +366,6 @@ private fun AirportCard(
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Airport icon circle
             Surface(
                 shape    = CircleShape,
                 color    = MaterialTheme.colorScheme.primaryContainer,
@@ -363,7 +381,6 @@ private fun AirportCard(
                 }
             }
 
-            // Airport info
             Column(
                 modifier            = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(3.dp)
@@ -383,7 +400,6 @@ private fun AirportCard(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    // City badge
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = MaterialTheme.colorScheme.secondaryContainer
@@ -406,7 +422,6 @@ private fun AirportCard(
                 }
             }
 
-            // Edit / Delete
             Column {
                 IconButton(onClick = onEdit) {
                     Icon(
@@ -427,7 +442,6 @@ private fun AirportCard(
     }
 }
 
-// ─── Form section label ───────────────────────────────────────────────────────
 @Composable
 private fun AirportFormSectionLabel(text: String) {
     Text(
