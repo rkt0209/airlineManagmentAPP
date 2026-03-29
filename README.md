@@ -514,7 +514,7 @@ Integer IDs (`flightId`, `departureId`, `arrivalId`, `pricePerSeat`) use `NavTyp
 - Android Studio Hedgehog (2023.1.1) or newer
 - JDK 17+
 - Android device or emulator with API 24+
-- All 5 backend microservices running locally (see the [main project README](../README.md))
+- All 5 backend microservices running locally (see the [main project README]([../README.md](https://github.com/rkt0209/Airline-Booking-System-Distributed/blob/main/README.md)))
 
 ### Steps
 
