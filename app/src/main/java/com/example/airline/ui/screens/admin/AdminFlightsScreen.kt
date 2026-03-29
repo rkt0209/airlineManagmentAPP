@@ -74,6 +74,8 @@ import com.example.airline.data.remote.AirplaneItem
 import com.example.airline.data.remote.AirportItem
 import com.example.airline.data.remote.FlightItem
 import java.text.NumberFormat
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 
 // ─── UI display model ─────────────────────────────────────────────────────────
@@ -841,15 +843,22 @@ private fun abbreviateAirport(name: String): String {
 }
 
 /**
- * Extracts the HH:mm time portion from either:
- *  - ISO-8601  "2024-01-15T06:00:00.000Z" → "06:00"
- *  - Local     "2024-01-15 06:00"          → "06:00"
- *  - Time-only "06:00"                     → "06:00"
+ * Extracts the HH:mm time portion and converts to the device's local timezone.
+ *  - ISO-8601 "2024-01-15T10:30:00.000Z" → "16:00" (on a device in IST, UTC+5:30)
+ *  - Local    "2024-01-15 16:00"          → "16:00"
+ *  - Time-only "16:00"                   → "16:00"
  */
-private fun extractTime(dateTime: String): String = when {
-    dateTime.contains('T') -> dateTime.substring(11, minOf(16, dateTime.length))
-    dateTime.contains(' ') -> dateTime.substringAfter(' ').take(5)
-    else                   -> dateTime.take(5)
+private fun extractTime(dateTime: String): String {
+    if (dateTime.contains('T')) {
+        return try {
+            val ldt = Instant.parse(dateTime).atZone(ZoneId.systemDefault())
+            String.format("%02d:%02d", ldt.hour, ldt.minute)
+        } catch (_: Exception) {
+            dateTime.substring(11, minOf(16, dateTime.length))
+        }
+    }
+    return if (dateTime.contains(' ')) dateTime.substringAfter(' ').take(5)
+    else dateTime.take(5)
 }
 
 private fun formatFlightCurrency(amount: Int): String {

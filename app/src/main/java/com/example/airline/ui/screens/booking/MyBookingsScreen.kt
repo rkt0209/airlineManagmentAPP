@@ -21,12 +21,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -37,34 +40,30 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 
 // Hardcoded palette so boarding-pass gradient is immune to dynamic color
-private val PassHeaderStart  = Color(0xFF071226)
-private val PassHeaderEnd    = Color(0xFF1565C0)
-private val PassOnHeader     = Color(0xFFEAF2FF)
+private val PassHeaderStart   = Color(0xFF071226)
+private val PassHeaderEnd     = Color(0xFF1565C0)
+private val PassOnHeader      = Color(0xFFEAF2FF)
 private val PassOnHeaderMuted = Color(0xFF8BAFD4)
-
-data class BookingUi(
-    val bookingId:   String,
-    val route:       String,
-    val flightNumber: String,
-    val seatsBooked: Int,
-    val totalCost:   String,
-    val status:      String
-)
 
 @Composable
 fun MyBookingsScreen(
-    onBackHome:   () -> Unit,
-    outerPadding: PaddingValues = PaddingValues()
+    onBackHome:    () -> Unit,
+    outerPadding:  PaddingValues = PaddingValues(),
+    viewModel:     BookingViewModel = hiltViewModel()
 ) {
-    val bookings = remember {
-        listOf(
-            BookingUi("BKG-98765", "DEL to BOM", "FL-101", 2, "₹10,998", "Confirmed"),
-            BookingUi("BKG-98112", "BLR to HYD", "FL-407", 1, "₹5,980",  "Confirmed"),
-            BookingUi("BKG-97240", "CCU to DEL", "FL-233", 3, "₹18,450", "Confirmed"),
-            BookingUi("BKG-96318", "BOM to BLR", "FL-592", 1, "₹7,250",  "Confirmed")
-        )
+    val myBookingsState by viewModel.myBookingsState.collectAsState()
+
+    // Fetch bookings when the screen first appears
+    LaunchedEffect(Unit) {
+        viewModel.fetchMyBookings()
+    }
+
+    val bookings: List<BookingUi> = when (val s = myBookingsState) {
+        is MyBookingsState.Success -> s.bookings
+        else -> emptyList()
     }
 
     Box(
@@ -110,26 +109,91 @@ fun MyBookingsScreen(
                             style      = MaterialTheme.typography.headlineMedium,
                             fontWeight = FontWeight.Bold
                         )
-                        Text(
-                            text  = "${bookings.size} upcoming bookings",
-                            color = PassOnHeaderMuted,
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                        when (val s = myBookingsState) {
+                            is MyBookingsState.Success -> Text(
+                                text  = "${s.bookings.size} booking${if (s.bookings.size != 1) "s" else ""}",
+                                color = PassOnHeaderMuted,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                            else -> Text(
+                                text  = "Loading your bookings…",
+                                color = PassOnHeaderMuted,
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
                     }
                 }
             }
 
-            // ── Boarding pass cards ───────────────────────────────────────────
             item { Spacer(Modifier.height(16.dp)) }
 
-            items(bookings) { booking ->
-                BoardingPassCard(
-                    booking           = booking,
-                    screenBackground  = MaterialTheme.colorScheme.background,
-                    modifier          = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom = 16.dp)
-                )
+            // ── State-driven content ──────────────────────────────────────────
+            when (val s = myBookingsState) {
+                is MyBookingsState.Loading -> item {
+                    Box(
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                is MyBookingsState.Error -> item {
+                    Column(
+                        modifier            = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text      = s.message,
+                            style     = MaterialTheme.typography.bodyMedium,
+                            color     = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
+                        )
+                        Button(onClick = { viewModel.fetchMyBookings() }) {
+                            Text("Retry")
+                        }
+                    }
+                }
+
+                is MyBookingsState.Empty -> item {
+                    Column(
+                        modifier            = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector        = Icons.Filled.FlightTakeoff,
+                            contentDescription = null,
+                            tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                            modifier           = Modifier.size(56.dp)
+                        )
+                        Text(
+                            text      = "No bookings yet.\nSearch for a flight to get started!",
+                            style     = MaterialTheme.typography.bodyLarge,
+                            color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+
+                is MyBookingsState.Success -> {
+                    items(bookings) { booking ->
+                        BoardingPassCard(
+                            booking           = booking,
+                            screenBackground  = MaterialTheme.colorScheme.background,
+                            modifier          = Modifier
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 16.dp)
+                        )
+                    }
+                }
             }
 
             // ── Book new flight button ────────────────────────────────────────
@@ -140,7 +204,7 @@ fun MyBookingsScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 16.dp)
                         .height(52.dp),
-                    shape    = RoundedCornerShape(16.dp)
+                    shape = RoundedCornerShape(16.dp)
                 ) {
                     Text(
                         text       = "Search New Flight",
@@ -154,18 +218,7 @@ fun MyBookingsScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Boarding pass card
-// Design:
-//   ┌─────────────────────────────────────────────────────────────┐
-//   │  [Gradient navy header]  DEL ──✈──  BOM   FL-101  [chip]   │
-//   ├──○ ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─ ○──│  ← tearline
-//   │  Booking ID    Seats    Total Paid                          │
-//   │  ▌▌ ▌▌▌ ▌ ▌▌▌ ▌ ▌▌▌▌ ▌ ▌▌ …  (barcode)                   │
-//   └─────────────────────────────────────────────────────────────┘
-// The half-circles at the tearline are circles whose centers sit on the left/right
-// edges of the card. Because Surface clips to RoundedCornerShape(20dp) and the
-// circles are at the straight mid-card edges (not corners), exactly half of each
-// circle is visible — creating the classic boarding-pass notch.
+// Boarding pass card (premium design with tear-off notch)
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun BoardingPassCard(
@@ -195,7 +248,6 @@ private fun BoardingPassCard(
                     .padding(horizontal = 20.dp, vertical = 18.dp)
             ) {
                 Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                    // Route row
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -204,10 +256,10 @@ private fun BoardingPassCard(
                         // Origin
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text       = fromCode,
-                                style      = MaterialTheme.typography.displaySmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color      = Color.White,
+                                text          = fromCode,
+                                style         = MaterialTheme.typography.displaySmall,
+                                fontWeight    = FontWeight.ExtraBold,
+                                color         = Color.White,
                                 letterSpacing = (-1).sp
                             )
                             Text(
@@ -222,9 +274,11 @@ private fun BoardingPassCard(
                             )
                         }
 
-                        // Flight path: dashes + plane icon + dashes
+                        // Flight path
                         Row(
-                            modifier          = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            modifier          = Modifier
+                                .weight(1f)
+                                .padding(horizontal = 8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             FlightDashLine(modifier = Modifier.weight(1f))
@@ -232,9 +286,7 @@ private fun BoardingPassCard(
                                 imageVector        = Icons.Filled.FlightTakeoff,
                                 contentDescription = null,
                                 tint               = Color.White.copy(alpha = 0.85f),
-                                modifier           = Modifier
-                                    .size(22.dp)
-                                    .padding(horizontal = 2.dp)
+                                modifier           = Modifier.size(22.dp).padding(horizontal = 2.dp)
                             )
                             FlightDashLine(modifier = Modifier.weight(1f))
                         }
@@ -242,10 +294,10 @@ private fun BoardingPassCard(
                         // Destination
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text(
-                                text       = toCode,
-                                style      = MaterialTheme.typography.displaySmall,
-                                fontWeight = FontWeight.ExtraBold,
-                                color      = Color.White,
+                                text          = toCode,
+                                style         = MaterialTheme.typography.displaySmall,
+                                fontWeight    = FontWeight.ExtraBold,
+                                color         = Color.White,
                                 letterSpacing = (-1).sp
                             )
                             Text(
@@ -261,16 +313,16 @@ private fun BoardingPassCard(
                         }
                     }
 
-                    // Sub-row: flight number + status chip
+                    // Flight number + status chip
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment     = Alignment.CenterVertically
                     ) {
                         Text(
-                            text  = booking.flightNumber,
-                            style = MaterialTheme.typography.labelLarge,
-                            color = PassOnHeaderMuted,
+                            text       = booking.flightNumber,
+                            style      = MaterialTheme.typography.labelLarge,
+                            color      = PassOnHeaderMuted,
                             fontWeight = FontWeight.SemiBold
                         )
                         BoardingStatusChip(status = booking.status)
@@ -279,13 +331,7 @@ private fun BoardingPassCard(
             }
 
             // ── Tear-off divider ──────────────────────────────────────────────
-            // Box height is 24dp; circles (24dp diameter) are centered on the
-            // left/right edges — Surface clips them to half-circles.
-            Box(modifier = Modifier
-                .fillMaxWidth()
-                .height(24.dp)
-            ) {
-                // Left notch circle
+            Box(modifier = Modifier.fillMaxWidth().height(24.dp)) {
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -293,7 +339,6 @@ private fun BoardingPassCard(
                         .background(screenBackground, CircleShape)
                         .align(Alignment.CenterStart)
                 )
-                // Dashed divider line
                 Canvas(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -313,7 +358,6 @@ private fun BoardingPassCard(
                         x += dashW + gapW
                     }
                 }
-                // Right notch circle
                 Box(
                     modifier = Modifier
                         .size(24.dp)
@@ -331,7 +375,6 @@ private fun BoardingPassCard(
                     .padding(top = 12.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Info grid
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -340,8 +383,6 @@ private fun BoardingPassCard(
                     PassInfoItem(label = "Seats",       value = booking.seatsBooked.toString())
                     PassInfoItem(label = "Total Paid",  value = booking.totalCost)
                 }
-
-                // Barcode placeholder
                 BarcodeStrip(bookingId = booking.bookingId)
             }
         }
@@ -352,16 +393,18 @@ private fun BoardingPassCard(
 
 @Composable
 private fun BoardingStatusChip(status: String) {
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = Color(0xFF00C853).copy(alpha = 0.18f)
-    ) {
+    val (chipColor, textColor) = when (status.lowercase()) {
+        "booked"    -> Color(0xFF00C853).copy(alpha = 0.18f) to Color(0xFF00C853)
+        "cancelled" -> Color(0xFFD32F2F).copy(alpha = 0.14f) to Color(0xFFD32F2F)
+        else        -> Color(0xFFFFA000).copy(alpha = 0.14f) to Color(0xFFFFA000)
+    }
+    Surface(shape = RoundedCornerShape(999.dp), color = chipColor) {
         Text(
             text       = "● $status",
             modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
             style      = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color      = Color(0xFF00C853)
+            color      = textColor
         )
     }
 }
@@ -383,12 +426,9 @@ private fun PassInfoItem(label: String, value: String) {
     }
 }
 
-/** Horizontal dashed line drawn with Canvas — used inside the route header. */
 @Composable
 private fun FlightDashLine(modifier: Modifier = Modifier) {
-    Canvas(
-        modifier = modifier.height(1.dp)
-    ) {
+    Canvas(modifier = modifier.height(1.dp)) {
         val dashW = 4.dp.toPx()
         val gapW  = 3.dp.toPx()
         var x     = 0f
@@ -403,14 +443,11 @@ private fun FlightDashLine(modifier: Modifier = Modifier) {
     }
 }
 
-/** Simulated barcode strip — a deterministic sequence of bar widths derived from the booking ID. */
 @Composable
 private fun BarcodeStrip(bookingId: String) {
     val barColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f)
-
-    // Deterministic bar pattern seeded by bookingId hash so each pass looks unique
-    val seed    = bookingId.hashCode()
-    val pattern = (0 until 40).map { i ->
+    val seed     = bookingId.hashCode()
+    val pattern  = (0 until 40).map { i ->
         (((seed ushr (i * 3)) and 0x07) + 1).coerceIn(1, 4)
     }
 
@@ -427,7 +464,7 @@ private fun BarcodeStrip(bookingId: String) {
             var x      = 0f
             pattern.forEachIndexed { idx, w ->
                 val barW = w * unitPx
-                if (idx % 2 == 0) {   // even index = bar, odd = gap
+                if (idx % 2 == 0) {
                     drawRect(
                         color   = barColor,
                         topLeft = Offset(x, 0f),
@@ -440,22 +477,26 @@ private fun BarcodeStrip(bookingId: String) {
         }
 
         Text(
-            text      = bookingId,
-            modifier  = Modifier.fillMaxWidth(),
-            textAlign = TextAlign.Center,
-            style     = MaterialTheme.typography.labelSmall,
-            color     = MaterialTheme.colorScheme.onSurfaceVariant,
+            text          = bookingId,
+            modifier      = Modifier.fillMaxWidth(),
+            textAlign     = TextAlign.Center,
+            style         = MaterialTheme.typography.labelSmall,
+            color         = MaterialTheme.colorScheme.onSurfaceVariant,
             letterSpacing = 3.sp
         )
     }
 }
 
-/** Maps IATA code → city short-name for the boarding pass display. */
-private fun cityNameFor(code: String) = when (code) {
-    "DEL" -> "Delhi"
-    "BOM" -> "Mumbai"
-    "BLR" -> "Bengaluru"
-    "HYD" -> "Hyderabad"
-    "CCU" -> "Kolkata"
-    else  -> code
+/** Maps IATA-style code → city short-name for boarding pass display.
+ *  Works with both the old hardcoded codes and 3-char prefixes from real airport names. */
+private fun cityNameFor(code: String) = when (code.uppercase()) {
+    "DEL", "IND" -> "Delhi"
+    "BOM", "MUM" -> "Mumbai"
+    "BLR", "BEN" -> "Bengaluru"
+    "HYD"        -> "Hyderabad"
+    "CCU", "KOL" -> "Kolkata"
+    "MAA", "CHE" -> "Chennai"
+    "AMD", "AHM" -> "Ahmedabad"
+    "PNQ", "PUN" -> "Pune"
+    else         -> code
 }

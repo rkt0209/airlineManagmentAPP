@@ -2,6 +2,7 @@ package com.example.airline.ui.screens.profile
 
 import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.collectAsState
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -42,8 +43,10 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -63,9 +66,11 @@ private val UserOnHdrMuted = Color(0xFF8BAFD4)
 @Composable
 fun UserProfileScreen(
     outerPadding: PaddingValues = PaddingValues(),
-    onLogout: () -> Unit
+    onLogout:     () -> Unit,
+    viewModel:    ProfileViewModel = hiltViewModel()
 ) {
-    val context = LocalContext.current
+    val profile  by viewModel.profile.collectAsState()
+    val context  = LocalContext.current
 
     Box(
         modifier = Modifier
@@ -113,9 +118,9 @@ fun UserProfileScreen(
                         )
                     }
 
-                    // Email — only User model fields shown (ID, Email, Role)
+                    // Email — real value from decoded JWT
                     Text(
-                        text       = "passenger@example.com",
+                        text       = profile?.email ?: "—",
                         style      = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color      = UserOnHdr
@@ -127,7 +132,7 @@ fun UserProfileScreen(
                         color = Color.White.copy(alpha = 0.14f)
                     ) {
                         Text(
-                            text          = "● PASSENGER",
+                            text          = "● ${profile?.role?.uppercase() ?: "PASSENGER"}",
                             modifier      = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                             style         = MaterialTheme.typography.labelMedium,
                             fontWeight    = FontWeight.Bold,

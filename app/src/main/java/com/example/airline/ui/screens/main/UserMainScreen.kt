@@ -41,7 +41,13 @@ import com.example.airline.ui.screens.profile.UserProfileScreen
 @Composable
 fun UserMainScreen(
     initialTab: Int,
-    onSearchFlights: (departureCode: String, arrivalCode: String, selectedDate: String) -> Unit,
+    onSearchFlights: (
+        departureId:   Int,
+        departure:     String,
+        arrivalId:     Int,
+        arrival:       String,
+        selectedDate:  String
+    ) -> Unit,
     onLogout: () -> Unit
 ) {
     var selectedTab by rememberSaveable { mutableIntStateOf(initialTab.coerceIn(0, 2)) }

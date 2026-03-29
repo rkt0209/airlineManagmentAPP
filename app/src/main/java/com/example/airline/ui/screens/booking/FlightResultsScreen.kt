@@ -1,10 +1,7 @@
 package com.example.airline.ui.screens.booking
 
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +22,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.FlightTakeoff
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -32,7 +30,9 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -41,61 +41,80 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.NumberFormat
+import java.time.Duration
+import java.time.Instant
+import java.time.ZoneId
 import java.util.Locale
 
-// ─── Airline branding palette (index-matched with static flight list) ─────────
+// ─── Airline branding palette (index-matched) ─────────────────────────────────
 private val AirlineBgColors = listOf(
-    Color(0xFF1565C0), // IndiAir  – deep blue
-    Color(0xFF00838F), // SkyLink  – teal
-    Color(0xFF2E7D32), // BlueStar – forest green
-    Color(0xFF6A1B9A), // VeloAir  – purple
-    Color(0xFFBF360C), // AirDesh  – deep orange
+    Color(0xFF1565C0), Color(0xFF00838F), Color(0xFF2E7D32),
+    Color(0xFF6A1B9A), Color(0xFFBF360C)
 )
 private val AirlineInitials = listOf("IA", "SL", "BS", "VA", "AD")
 private val AirlineNames    = listOf("IndiAir", "SkyLink", "BlueStar", "VeloAir", "AirDesh")
 
-// ─── Header palette (immune to dynamic color) ─────────────────────────────────
-private val ResHdrTop    = Color(0xFF071226)
-private val ResHdrMid    = Color(0xFF0B1B3A)
-private val ResHdrBottom = Color(0xFF1565C0)
-private val ResOnHdr     = Color(0xFFEAF2FF)
+// ─── Header palette ───────────────────────────────────────────────────────────
+private val ResHdrTop     = Color(0xFF071226)
+private val ResHdrMid     = Color(0xFF0B1B3A)
+private val ResHdrBottom  = Color(0xFF1565C0)
+private val ResOnHdr      = Color(0xFFEAF2FF)
 private val ResOnHdrMuted = Color(0xFF8BAFD4)
 
+// ─── Shared UI flight model ───────────────────────────────────────────────────
 data class FlightUi(
+    val id:            Int,
     val flightNumber:  String,
-    val departureTime: String,
-    val arrivalTime:   String,
+    val departureTime: String,   // HH:mm display string
+    val arrivalTime:   String,   // HH:mm display string
     val pricePerSeat:  Int,
     val seatsLeft:     Int
 )
 
 @Composable
 fun FlightResultsScreen(
-    departureCode:    String,
-    arrivalCode:      String,
-    selectedDate:     String,
-    onBack:           () -> Unit,
-    onFlightSelected: (flight: FlightUi, departureCode: String, arrivalCode: String, date: String) -> Unit
+    departureAirportId: Int,
+    arrivalAirportId:   Int,
+    departureCode:      String,
+    arrivalCode:        String,
+    selectedDate:       String,
+    onBack:             () -> Unit,
+    onFlightSelected:   (flight: FlightUi, departureCode: String, arrivalCode: String, date: String) -> Unit,
+    viewModel:          FlightResultsViewModel = hiltViewModel()
 ) {
-    val flights = remember(departureCode, arrivalCode, selectedDate) {
-        listOf(
-            FlightUi("FL-101", "06:15", "08:35", 5499, 12),
-            FlightUi("FL-233", "09:10", "11:30", 6150, 7),
-            FlightUi("FL-407", "13:45", "16:00", 5980, 18),
-            FlightUi("FL-592", "18:20", "20:40", 7250, 5),
-            FlightUi("FL-730", "21:10", "23:25", 6780, 9),
-        )
+    val searchState by viewModel.searchState.collectAsState()
+
+    // Trigger search once when the screen is first shown
+    LaunchedEffect(departureAirportId, arrivalAirportId) {
+        viewModel.searchFlights(departureAirportId, arrivalAirportId)
+    }
+
+    // Map API FlightItem → FlightUi
+    val flights: List<FlightUi> = when (val s = searchState) {
+        is FlightSearchState.Success -> s.flights.map { f ->
+            FlightUi(
+                id            = f.id,
+                flightNumber  = f.flightNumber,
+                departureTime = parseDisplayTime(f.departureTime),
+                arrivalTime   = parseDisplayTime(f.arrivalTime),
+                pricePerSeat  = f.price,
+                seatsLeft     = f.totalSeats
+            )
+        }
+        else -> emptyList()
     }
 
     Scaffold(contentWindowInsets = WindowInsets(0)) { _ ->
         LazyColumn(
-            modifier        = Modifier
+            modifier       = Modifier
                 .fillMaxSize()
                 .background(MaterialTheme.colorScheme.background),
-            contentPadding  = PaddingValues(bottom = 32.dp)
+            contentPadding = PaddingValues(bottom = 32.dp)
         ) {
 
             // ── Gradient header ─────────────────────────────────────────────
@@ -104,12 +123,9 @@ fun FlightResultsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(
-                            Brush.verticalGradient(
-                                listOf(ResHdrTop, ResHdrMid, ResHdrBottom)
-                            )
+                            Brush.verticalGradient(listOf(ResHdrTop, ResHdrMid, ResHdrBottom))
                         )
                 ) {
-                    // Watermark plane
                     Icon(
                         imageVector        = Icons.Filled.FlightTakeoff,
                         contentDescription = null,
@@ -121,7 +137,6 @@ fun FlightResultsScreen(
                     )
 
                     Column(modifier = Modifier.fillMaxWidth()) {
-                        // Back button row
                         IconButton(
                             onClick  = onBack,
                             modifier = Modifier.padding(top = 8.dp, start = 4.dp)
@@ -133,7 +148,6 @@ fun FlightResultsScreen(
                             )
                         }
 
-                        // Route + metadata
                         Column(
                             modifier              = Modifier
                                 .fillMaxWidth()
@@ -154,16 +168,23 @@ fun FlightResultsScreen(
                                 style = MaterialTheme.typography.bodyMedium
                             )
                             Spacer(Modifier.height(4.dp))
-                            // "N flights found" chip
+                            // Flight count chip
                             Surface(
                                 shape = RoundedCornerShape(999.dp),
                                 color = Color.White.copy(alpha = 0.14f)
                             ) {
+                                val label = when (searchState) {
+                                    is FlightSearchState.Searching -> "Searching…"
+                                    is FlightSearchState.Success   -> "${flights.size} flights found"
+                                    is FlightSearchState.Empty     -> "No flights found"
+                                    is FlightSearchState.Error     -> "Error"
+                                    else                           -> ""
+                                }
                                 Text(
-                                    text     = "${flights.size} flights found",
-                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                    color    = ResOnHdr,
-                                    style    = MaterialTheme.typography.labelLarge,
+                                    text       = label,
+                                    modifier   = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+                                    color      = ResOnHdr,
+                                    style      = MaterialTheme.typography.labelLarge,
                                     fontWeight = FontWeight.SemiBold
                                 )
                             }
@@ -172,22 +193,100 @@ fun FlightResultsScreen(
                 }
             }
 
-            // ── Flight ticket cards ─────────────────────────────────────────
             item { Spacer(Modifier.height(8.dp)) }
 
-            itemsIndexed(flights) { idx, flight ->
-                FlightTicketCard(
-                    flight        = flight,
-                    departureCode = departureCode,
-                    arrivalCode   = arrivalCode,
-                    airlineIdx    = idx,
-                    modifier      = Modifier
-                        .padding(horizontal = 16.dp)
-                        .padding(bottom     = 14.dp),
-                    onSelect      = {
-                        onFlightSelected(flight, departureCode, arrivalCode, selectedDate)
+            // ── States ──────────────────────────────────────────────────────
+            when (val s = searchState) {
+                is FlightSearchState.Searching -> item {
+                    Box(
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            CircularProgressIndicator()
+                            Text(
+                                text  = "Searching for flights…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                )
+                }
+
+                is FlightSearchState.Error -> item {
+                    Box(
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text      = s.message,
+                                style     = MaterialTheme.typography.bodyMedium,
+                                color     = MaterialTheme.colorScheme.error,
+                                textAlign = TextAlign.Center
+                            )
+                            Button(onClick = {
+                                viewModel.searchFlights(departureAirportId, arrivalAirportId)
+                            }) { Text("Retry") }
+                        }
+                    }
+                }
+
+                is FlightSearchState.Empty -> item {
+                    Box(
+                        modifier         = Modifier
+                            .fillMaxWidth()
+                            .padding(32.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector        = Icons.Filled.FlightTakeoff,
+                                contentDescription = null,
+                                tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                modifier           = Modifier.size(56.dp)
+                            )
+                            Text(
+                                text      = "No flights available for this route.",
+                                style     = MaterialTheme.typography.bodyLarge,
+                                color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+
+                is FlightSearchState.Success -> {
+                    itemsIndexed(flights) { idx, flight ->
+                        FlightTicketCard(
+                            flight        = flight,
+                            departureCode = departureCode,
+                            arrivalCode   = arrivalCode,
+                            airlineIdx    = idx,
+                            modifier      = Modifier
+                                .padding(horizontal = 16.dp)
+                                .padding(bottom = 14.dp),
+                            onSelect      = {
+                                onFlightSelected(flight, departureCode, arrivalCode, selectedDate)
+                            }
+                        )
+                    }
+                }
+
+                else -> { /* Idle — nothing to show */ }
             }
         }
     }
@@ -195,13 +294,6 @@ fun FlightResultsScreen(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Premium airline ticket card
-// Layout:
-//   ┌────────────────────────────────────────────────────────────────────────┐
-//   │  [●] IndiAir  FL-101                            ⬤ 12 seats left        │
-//   │  06:15 ─ ─ ─ ─ ✈ ─ ─ ─ ─ 08:35   (2h 20m)                            │
-//   ├─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─  ─ ─┤
-//   │  ₹5,499 / seat                                      [ Select → ]       │
-//   └────────────────────────────────────────────────────────────────────────┘
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun FlightTicketCard(
@@ -216,7 +308,7 @@ private fun FlightTicketCard(
     val airlineInitial = AirlineInitials[airlineIdx % AirlineInitials.size]
     val airlineName    = AirlineNames[airlineIdx % AirlineNames.size]
     val duration       = flightDuration(flight.departureTime, flight.arrivalTime)
-    val seatsLow       = flight.seatsLeft <= 6
+    val seatsLow       = flight.seatsLeft in 1..6
 
     Surface(
         modifier        = modifier.fillMaxWidth(),
@@ -226,7 +318,6 @@ private fun FlightTicketCard(
         onClick         = onSelect
     ) {
         Column {
-            // ── Upper section ──────────────────────────────────────────────
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -239,7 +330,6 @@ private fun FlightTicketCard(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    // Airline logo circle
                     Surface(
                         shape    = CircleShape,
                         color    = airlineColor,
@@ -269,7 +359,6 @@ private fun FlightTicketCard(
                         )
                     }
 
-                    // Seats badge
                     Surface(
                         shape = RoundedCornerShape(999.dp),
                         color = if (seatsLow)
@@ -278,11 +367,11 @@ private fun FlightTicketCard(
                             Color(0xFF2E7D32).copy(alpha = 0.10f)
                     ) {
                         Text(
-                            text     = "${flight.seatsLeft} seats",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            style    = MaterialTheme.typography.labelSmall,
+                            text       = "${flight.seatsLeft} seats",
+                            modifier   = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style      = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.SemiBold,
-                            color    = if (seatsLow) Color(0xFFE65100) else Color(0xFF2E7D32)
+                            color      = if (seatsLow) Color(0xFFE65100) else Color(0xFF2E7D32)
                         )
                     }
                 }
@@ -292,7 +381,6 @@ private fun FlightTicketCard(
                     modifier          = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Departure
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text       = flight.departureTime,
@@ -307,7 +395,6 @@ private fun FlightTicketCard(
                         )
                     }
 
-                    // Flight path
                     Column(
                         modifier              = Modifier
                             .weight(1f)
@@ -330,9 +417,7 @@ private fun FlightTicketCard(
                                 imageVector        = Icons.Filled.FlightTakeoff,
                                 contentDescription = null,
                                 tint               = MaterialTheme.colorScheme.primary,
-                                modifier           = Modifier
-                                    .size(18.dp)
-                                    .padding(horizontal = 2.dp)
+                                modifier           = Modifier.size(18.dp).padding(horizontal = 2.dp)
                             )
                             CardDashLine(modifier = Modifier.weight(1f))
                         }
@@ -343,7 +428,6 @@ private fun FlightTicketCard(
                         )
                     }
 
-                    // Arrival
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Text(
                             text       = flight.arrivalTime,
@@ -360,7 +444,7 @@ private fun FlightTicketCard(
                 }
             }
 
-            // ── Dashed divider ─────────────────────────────────────────────
+            // Dashed divider
             Canvas(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -380,7 +464,7 @@ private fun FlightTicketCard(
                 }
             }
 
-            // ── Price + select row ─────────────────────────────────────────
+            // Price + select row
             Row(
                 modifier              = Modifier
                     .fillMaxWidth()
@@ -437,11 +521,31 @@ private fun CardDashLine(modifier: Modifier = Modifier) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/** Parses an ISO-8601 instant or a bare "HH:mm" string to a "HH:mm" display string.
+ *  Converts to the device's local timezone so IST users see their local time. */
+internal fun parseDisplayTime(raw: String): String {
+    return try {
+        val ldt = Instant.parse(raw).atZone(ZoneId.systemDefault())
+        String.format("%02d:%02d", ldt.hour, ldt.minute)
+    } catch (_: Exception) {
+        if (raw.length >= 5 && raw[2] == ':') raw.take(5) else raw
+    }
+}
+
 private fun flightDuration(dep: String, arr: String): String {
-    val (dH, dM) = dep.split(":").map { it.toInt() }
-    val (aH, aM) = arr.split(":").map { it.toInt() }
-    val mins     = (aH * 60 + aM) - (dH * 60 + dM)
-    return "${mins / 60}h ${mins % 60}m"
+    // Try ISO instant parsing first (real API data)
+    return try {
+        val mins = Duration.between(Instant.parse(dep), Instant.parse(arr)).toMinutes()
+        "${mins / 60}h ${mins % 60}m"
+    } catch (_: Exception) {
+        // Fallback for already-parsed "HH:mm" strings
+        try {
+            val (dH, dM) = dep.split(":").map { it.toInt() }
+            val (aH, aM) = arr.split(":").map { it.toInt() }
+            val mins     = (aH * 60 + aM) - (dH * 60 + dM)
+            "${mins / 60}h ${mins % 60}m"
+        } catch (_: Exception) { "N/A" }
+    }
 }
 
 private fun formatResultCurrency(amount: Int): String {

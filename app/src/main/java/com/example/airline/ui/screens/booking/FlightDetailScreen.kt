@@ -1,6 +1,5 @@
 package com.example.airline.ui.screens.booking
 
-import android.widget.Toast
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
@@ -23,7 +22,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FlightTakeoff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -33,12 +34,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,48 +50,117 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
+import androidx.hilt.navigation.compose.hiltViewModel
 import java.text.NumberFormat
 import java.util.Locale
 
 // Hardcoded palette so the hero gradient ignores dynamic color on Android 12+
-private val DetailHdrTop    = Color(0xFF071226)
-private val DetailHdrMid    = Color(0xFF0B1B3A)
-private val DetailHdrBottom = Color(0xFF1E88E5)
-private val DetailOnHdr     = Color(0xFFEAF2FF)
+private val DetailHdrTop     = Color(0xFF071226)
+private val DetailHdrMid     = Color(0xFF0B1B3A)
+private val DetailHdrBottom  = Color(0xFF1E88E5)
+private val DetailOnHdr      = Color(0xFFEAF2FF)
 private val DetailOnHdrMuted = Color(0xFF8BAFD4)
 
 @Composable
 fun FlightDetailScreen(
-    departureCode:     String,
-    arrivalCode:       String,
-    selectedDate:      String,
-    flightNumber:      String,
-    departureTime:     String,
-    arrivalTime:       String,
-    pricePerSeat:      Int,
-    onBack:            () -> Unit,
-    onBookingConfirmed: () -> Unit
+    flightId:           Int,
+    departureCode:      String,
+    arrivalCode:        String,
+    selectedDate:       String,
+    flightNumber:       String,
+    departureTime:      String,
+    arrivalTime:        String,
+    pricePerSeat:       Int,
+    onBack:             () -> Unit,
+    onBookingConfirmed: () -> Unit,
+    viewModel:          BookingViewModel = hiltViewModel()
 ) {
-    val context      = LocalContext.current
-    val scope        = rememberCoroutineScope()
-    var seats        by remember { mutableIntStateOf(1) }
-    var isConfirming by remember { mutableStateOf(false) }
+    val createState     by viewModel.createState.collectAsState()
+    var seats           by remember { mutableIntStateOf(1) }
+    var showErrorDialog by remember { mutableStateOf(false) }
+    var errorMessage    by remember { mutableStateOf("") }
+    var showSuccessDialog by remember { mutableStateOf(false) }
 
     val baseFare  = seats * pricePerSeat
     val taxes     = baseFare * 18 / 100
     val totalFare = baseFare + taxes
     val duration  = flightDurationDetail(departureTime, arrivalTime)
 
+    // React to booking state changes
+    LaunchedEffect(createState) {
+        when (val s = createState) {
+            is BookingCreateState.Success -> {
+                showSuccessDialog = true
+            }
+            is BookingCreateState.Error -> {
+                errorMessage = s.message
+                showErrorDialog = true
+            }
+            else -> { /* Loading / Idle — handled by button UI */ }
+        }
+    }
+
+    // Success dialog
+    if (showSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = { /* Force user to tap the button */ },
+            icon  = {
+                Icon(
+                    imageVector        = Icons.Filled.CheckCircle,
+                    contentDescription = null,
+                    tint               = Color(0xFF00C853),
+                    modifier           = Modifier.size(48.dp)
+                )
+            },
+            title = {
+                Text(
+                    text      = "Booking Confirmed!",
+                    style     = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center
+                )
+            },
+            text  = {
+                Text(
+                    text      = "Your booking for $flightNumber is confirmed.\nA confirmation email has been sent.",
+                    style     = MaterialTheme.typography.bodyMedium,
+                    textAlign = TextAlign.Center
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showSuccessDialog = false
+                        viewModel.resetCreateState()
+                        onBookingConfirmed()
+                    }
+                ) { Text("View My Bookings") }
+            }
+        )
+    }
+
+    // Error dialog
+    if (showErrorDialog) {
+        AlertDialog(
+            onDismissRequest = { showErrorDialog = false; viewModel.resetCreateState() },
+            title  = { Text("Booking Failed") },
+            text   = { Text(errorMessage) },
+            confirmButton = {
+                TextButton(onClick = { showErrorDialog = false; viewModel.resetCreateState() }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    val isLoading = createState is BookingCreateState.Loading
+
     Scaffold(
         contentWindowInsets = WindowInsets(0),
-        // ── Docked bottom bar: price summary + confirm ────────────────────
         bottomBar = {
             Surface(
                 modifier        = Modifier.fillMaxWidth(),
@@ -100,7 +172,6 @@ fun FlightDetailScreen(
                         .fillMaxWidth()
                         .padding(horizontal = 20.dp, vertical = 16.dp)
                 ) {
-                    // Fare summary line
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -135,20 +206,13 @@ fun FlightDetailScreen(
 
                     Spacer(Modifier.height(12.dp))
 
-                    // Confirm button
                     Button(
                         onClick = {
-                            if (isConfirming) return@Button
-                            isConfirming = true
-                            scope.launch {
-                                delay(1800)
-                                isConfirming = false
-                                Toast.makeText(context, "Booking confirmed! ✈", Toast.LENGTH_SHORT)
-                                    .show()
-                                onBookingConfirmed()
+                            if (!isLoading) {
+                                viewModel.createBooking(flightId, seats)
                             }
                         },
-                        enabled  = !isConfirming,
+                        enabled  = !isLoading,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp),
@@ -157,7 +221,7 @@ fun FlightDetailScreen(
                             containerColor = MaterialTheme.colorScheme.primary
                         )
                     ) {
-                        if (isConfirming) {
+                        if (isLoading) {
                             CircularProgressIndicator(
                                 modifier    = Modifier.size(20.dp),
                                 color       = MaterialTheme.colorScheme.onPrimary,
@@ -196,12 +260,9 @@ fun FlightDetailScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        Brush.verticalGradient(
-                            listOf(DetailHdrTop, DetailHdrMid, DetailHdrBottom)
-                        )
+                        Brush.verticalGradient(listOf(DetailHdrTop, DetailHdrMid, DetailHdrBottom))
                     )
             ) {
-                // Watermark
                 Icon(
                     imageVector        = Icons.Filled.FlightTakeoff,
                     contentDescription = null,
@@ -213,7 +274,6 @@ fun FlightDetailScreen(
                 )
 
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    // Back button row
                     IconButton(
                         onClick  = onBack,
                         modifier = Modifier.padding(top = 8.dp, start = 4.dp)
@@ -225,7 +285,6 @@ fun FlightDetailScreen(
                         )
                     }
 
-                    // Route
                     Column(
                         modifier            = Modifier
                             .fillMaxWidth()
@@ -242,7 +301,6 @@ fun FlightDetailScreen(
                             textAlign     = TextAlign.Center
                         )
 
-                        // Times row
                         Row(
                             modifier              = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center,
@@ -292,7 +350,6 @@ fun FlightDetailScreen(
                             }
                         }
 
-                        // Flight + date meta
                         Surface(
                             shape = RoundedCornerShape(999.dp),
                             color = Color.White.copy(alpha = 0.12f)
@@ -315,15 +372,13 @@ fun FlightDetailScreen(
                     .padding(horizontal = 16.dp, vertical = 20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // Seat selector card
                 SeatSelectorCard(
-                    seats       = seats,
+                    seats        = seats,
                     pricePerSeat = pricePerSeat,
-                    onDecrement = { if (seats > 1) seats-- },
-                    onIncrement = { if (seats < 9) seats++ }
+                    onDecrement  = { if (seats > 1) seats-- },
+                    onIncrement  = { if (seats < 9) seats++ }
                 )
 
-                // Fare breakdown card
                 FareBreakdownCard(
                     seats        = seats,
                     pricePerSeat = pricePerSeat,
@@ -332,7 +387,6 @@ fun FlightDetailScreen(
                     totalFare    = totalFare
                 )
 
-                // Spacer for the docked bottom bar
                 Spacer(Modifier.height(innerPadding.calculateBottomPadding()))
             }
         }
@@ -340,7 +394,7 @@ fun FlightDetailScreen(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Seat selector card  ─ modern pill-style +/− stepper
+// Seat selector card
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun SeatSelectorCard(
@@ -356,7 +410,7 @@ private fun SeatSelectorCard(
         tonalElevation  = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier            = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Row(
@@ -377,21 +431,19 @@ private fun SeatSelectorCard(
                     )
                 }
 
-                // Stepper: [─]  N  [+]
                 Row(
                     verticalAlignment     = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Minus button
                     Box(
                         modifier = Modifier
                             .size(44.dp)
                             .background(
-                                color  = if (seats > 1)
+                                color = if (seats > 1)
                                     MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                                 else
                                     MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
-                                shape  = CircleShape
+                                shape = CircleShape
                             )
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
@@ -411,7 +463,6 @@ private fun SeatSelectorCard(
                         )
                     }
 
-                    // Count
                     Text(
                         text       = seats.toString(),
                         style      = MaterialTheme.typography.headlineMedium,
@@ -421,7 +472,6 @@ private fun SeatSelectorCard(
                         textAlign  = TextAlign.Center
                     )
 
-                    // Plus button
                     Box(
                         modifier = Modifier
                             .size(44.dp)
@@ -446,7 +496,7 @@ private fun SeatSelectorCard(
                 }
             }
 
-            // Visual seat count indicator (dots)
+            // Seat count indicator dots
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -471,7 +521,7 @@ private fun SeatSelectorCard(
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Fare breakdown — receipt style
+// Fare breakdown
 // ─────────────────────────────────────────────────────────────────────────────
 @Composable
 private fun FareBreakdownCard(
@@ -488,7 +538,7 @@ private fun FareBreakdownCard(
         tonalElevation  = 2.dp
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
+            modifier            = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
@@ -497,7 +547,6 @@ private fun FareBreakdownCard(
                 fontWeight = FontWeight.Bold
             )
 
-            // Base fare row
             FareRow(
                 label = "Base Fare ($seats × ₹${
                     NumberFormat.getNumberInstance(Locale("en", "IN")).format(pricePerSeat)
@@ -505,18 +554,12 @@ private fun FareBreakdownCard(
                 value = formatDetailCurrency(baseFare)
             )
 
-            // Taxes row
             FareRow(
                 label = "Taxes & Fees (18% GST)",
                 value = formatDetailCurrency(taxes)
             )
 
-            // Dashed separator
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(1.dp)
-            ) {
+            Canvas(modifier = Modifier.fillMaxWidth().height(1.dp)) {
                 val dashW = 8.dp.toPx()
                 val gapW  = 6.dp.toPx()
                 var x     = 0f
@@ -530,7 +573,6 @@ private fun FareBreakdownCard(
                 }
             }
 
-            // Total row
             Row(
                 modifier              = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -550,7 +592,6 @@ private fun FareBreakdownCard(
                 )
             }
 
-            // Savings note
             Surface(
                 shape = RoundedCornerShape(10.dp),
                 color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
@@ -593,7 +634,6 @@ private fun FareRow(label: String, value: String) {
     }
 }
 
-/** Dashed flight-path line inside the hero section. */
 @Composable
 private fun HeroFlightLine() {
     Row(
@@ -602,36 +642,18 @@ private fun HeroFlightLine() {
         modifier              = Modifier.fillMaxWidth()
     ) {
         Canvas(modifier = Modifier.weight(1f).height(1.dp)) {
-            val dashW = 4.dp.toPx()
-            val gapW  = 3.dp.toPx()
-            var x     = 0f
+            val dashW = 4.dp.toPx(); val gapW = 3.dp.toPx(); var x = 0f
             while (x < size.width) {
-                drawRect(
-                    color   = Color.White.copy(alpha = 0.35f),
-                    topLeft = Offset(x, 0f),
-                    size    = Size(minOf(dashW, size.width - x), 1.dp.toPx())
-                )
+                drawRect(Color.White.copy(alpha = 0.35f), Offset(x, 0f), Size(minOf(dashW, size.width - x), 1.dp.toPx()))
                 x += dashW + gapW
             }
         }
-        Icon(
-            imageVector        = Icons.Filled.FlightTakeoff,
-            contentDescription = null,
-            tint               = Color.White.copy(alpha = 0.70f),
-            modifier           = Modifier
-                .padding(horizontal = 6.dp)
-                .size(20.dp)
-        )
+        Icon(Icons.Filled.FlightTakeoff, null, tint = Color.White.copy(alpha = 0.70f),
+            modifier = Modifier.padding(horizontal = 6.dp).size(20.dp))
         Canvas(modifier = Modifier.weight(1f).height(1.dp)) {
-            val dashW = 4.dp.toPx()
-            val gapW  = 3.dp.toPx()
-            var x     = 0f
+            val dashW = 4.dp.toPx(); val gapW = 3.dp.toPx(); var x = 0f
             while (x < size.width) {
-                drawRect(
-                    color   = Color.White.copy(alpha = 0.35f),
-                    topLeft = Offset(x, 0f),
-                    size    = Size(minOf(dashW, size.width - x), 1.dp.toPx())
-                )
+                drawRect(Color.White.copy(alpha = 0.35f), Offset(x, 0f), Size(minOf(dashW, size.width - x), 1.dp.toPx()))
                 x += dashW + gapW
             }
         }
@@ -641,7 +663,7 @@ private fun HeroFlightLine() {
 private fun flightDurationDetail(dep: String, arr: String): String {
     val (dH, dM) = dep.split(":").map { it.toInt() }
     val (aH, aM) = arr.split(":").map { it.toInt() }
-    val mins     = (aH * 60 + aM) - (dH * 60 + dM)
+    val mins = (aH * 60 + aM) - (dH * 60 + dM)
     return "${mins / 60}h ${mins % 60}m"
 }
 
