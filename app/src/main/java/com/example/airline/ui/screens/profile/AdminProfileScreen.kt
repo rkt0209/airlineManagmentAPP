@@ -42,6 +42,8 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 
 // Hardcoded palette — admin hero uses a deeper, more authoritative midnight-to-blue-purple
 private val AdminHdrTop    = Color(0xFF060D1F)
@@ -63,9 +66,11 @@ private val AdminOnHdrMuted = Color(0xFF9FA8DA)
 @Composable
 fun AdminProfileScreen(
     outerPadding: PaddingValues = PaddingValues(),
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
+    viewModel: ProfileViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
+    val profile by viewModel.profile.collectAsState()
 
     Box(
         modifier = Modifier
@@ -114,13 +119,22 @@ fun AdminProfileScreen(
                         )
                     }
 
-                    // Email — only User model fields shown (ID, Email, Role)
+                    // Email — sourced from decoded JWT (only User model fields: ID, Email, Role)
                     Text(
-                        text       = "admin@airline.com",
+                        text       = profile?.email ?: "—",
                         style      = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color      = AdminOnHdr
                     )
+
+                    // User ID sub-label
+                    if (profile != null) {
+                        Text(
+                            text  = "ID #${profile!!.id}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = AdminOnHdrMuted
+                        )
+                    }
 
                     // Role badge — amber tint for admin authority
                     Surface(
@@ -128,7 +142,7 @@ fun AdminProfileScreen(
                         color = Color(0xFFE65100).copy(alpha = 0.22f)
                     ) {
                         Text(
-                            text          = "● ADMINISTRATOR",
+                            text          = "● ${(profile?.role ?: "ADMINISTRATOR").uppercase()}",
                             modifier      = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
                             style         = MaterialTheme.typography.labelMedium,
                             fontWeight    = FontWeight.Bold,

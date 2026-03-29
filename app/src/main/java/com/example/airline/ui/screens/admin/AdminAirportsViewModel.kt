@@ -63,6 +63,16 @@ class AdminAirportsViewModel @Inject constructor(
         }
     }
 
+    fun updateAirport(id: Int, name: String, address: String, cityId: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repository.updateAirport(id, name, address.ifBlank { null }, cityId)
+                .onSuccess  { fetchAirports() }
+                .onFailure  { _errorMessage.value = it.message }
+            _isLoading.value = false
+        }
+    }
+
     fun deleteAirport(id: Int) {
         viewModelScope.launch {
             repository.deleteAirport(id)

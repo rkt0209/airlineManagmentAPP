@@ -47,6 +47,16 @@ class AdminCitiesViewModel @Inject constructor(
         }
     }
 
+    fun updateCity(id: Int, name: String) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repository.updateCity(id, name)
+                .onSuccess  { fetchCities() }
+                .onFailure  { _errorMessage.value = it.message }
+            _isLoading.value = false
+        }
+    }
+
     fun deleteCity(id: Int) {
         viewModelScope.launch {
             repository.deleteCity(id)

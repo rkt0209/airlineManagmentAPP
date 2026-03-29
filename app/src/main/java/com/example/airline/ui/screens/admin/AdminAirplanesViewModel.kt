@@ -47,6 +47,16 @@ class AdminAirplanesViewModel @Inject constructor(
         }
     }
 
+    fun updateAirplane(id: Int, modelNumber: String, capacity: Int) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repository.updateAirplane(id, modelNumber, capacity)
+                .onSuccess  { fetchAirplanes() }
+                .onFailure  { _errorMessage.value = it.message }
+            _isLoading.value = false
+        }
+    }
+
     fun deleteAirplane(id: Int) {
         viewModelScope.launch {
             repository.deleteAirplane(id)

@@ -91,7 +91,8 @@ fun AdminAirportsScreen(
         }
     }
 
-    var showAddDialog        by remember { mutableStateOf(false) }
+    var showDialog           by remember { mutableStateOf(false) }
+    var editingAirportId     by remember { mutableStateOf<Int?>(null) }
     var newName              by remember { mutableStateOf("") }
     var newAddress           by remember { mutableStateOf("") }
     var selectedCity         by remember { mutableStateOf<CityItem?>(null) }
@@ -150,7 +151,12 @@ fun AdminAirportsScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick        = { showAddDialog = true },
+                onClick        = {
+                    editingAirportId = null
+                    newName = ""; newAddress = ""
+                    selectedCity = cityItems.firstOrNull()
+                    showDialog = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
@@ -185,7 +191,16 @@ fun AdminAirportsScreen(
                     items(airports, key = { it.id }) { airport ->
                         AirportCard(
                             airport  = airport,
-                            onEdit   = { /* Edit not yet implemented */ },
+                            onEdit   = {
+                                val original = airportItems.find { it.id == airport.id }
+                                editingAirportId = airport.id
+                                newName    = airport.name
+                                newAddress = airport.address
+                                selectedCity = original?.let { o -> cityItems.find { it.id == o.cityId } }
+                                    ?: cityItems.firstOrNull()
+                                nameError  = false
+                                showDialog = true
+                            },
                             onDelete = { viewModel.deleteAirport(airport.id) }
                         )
                     }
@@ -194,11 +209,13 @@ fun AdminAirportsScreen(
         }
     }
 
-    // ── Add Airport dialog ─────────────────────────────────────────────────
-    if (showAddDialog) {
+    // ── Add / Edit Airport dialog ──────────────────────────────────────────
+    if (showDialog) {
+        val isEditing = editingAirportId != null
         val resetDialog: () -> Unit = {
             newName = ""; newAddress = ""; nameError = false
-            selectedCity = cityItems.firstOrNull(); showAddDialog = false
+            selectedCity = cityItems.firstOrNull()
+            editingAirportId = null; showDialog = false
         }
 
         AlertDialog(
@@ -225,7 +242,7 @@ fun AdminAirportsScreen(
                             }
                         }
                         Text(
-                            text       = "Add New Airport",
+                            text       = if (isEditing) "Edit Airport" else "Add New Airport",
                             style      = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -330,7 +347,11 @@ fun AdminAirportsScreen(
                         val trimmed = newName.trim()
                         if (trimmed.isEmpty()) { nameError = true; return@TextButton }
                         val city = selectedCity ?: return@TextButton
-                        viewModel.addAirport(trimmed, newAddress.trim(), city.id)
+                        if (isEditing) {
+                            viewModel.updateAirport(editingAirportId!!, trimmed, newAddress.trim(), city.id)
+                        } else {
+                            viewModel.addAirport(trimmed, newAddress.trim(), city.id)
+                        }
                         resetDialog()
                     }
                 ) {

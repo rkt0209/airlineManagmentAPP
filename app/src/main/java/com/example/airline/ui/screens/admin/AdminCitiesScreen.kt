@@ -65,9 +65,13 @@ fun AdminCitiesScreen(
     val isLoading  by viewModel.isLoading.collectAsState()
     val errorMsg   by viewModel.errorMessage.collectAsState()
 
-    var showAddDialog by remember { mutableStateOf(false) }
+    var showDialog    by remember { mutableStateOf(false) }
+    var editingCity   by remember { mutableStateOf<CityItem?>(null) }
     var newCity       by remember { mutableStateOf("") }
     var cityError     by remember { mutableStateOf(false) }
+
+    // Back-compat: keep showAddDialog as alias so FAB still works
+    val showAddDialog = showDialog
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -119,7 +123,7 @@ fun AdminCitiesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick        = { showAddDialog = true },
+                onClick        = { editingCity = null; newCity = ""; showDialog = true },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
@@ -154,7 +158,12 @@ fun AdminCitiesScreen(
                     items(cities, key = { it.id }) { city ->
                         CityCard(
                             city     = city,
-                            onEdit   = { /* Edit not yet implemented */ },
+                            onEdit   = {
+                                editingCity = city
+                                newCity     = city.name
+                                cityError   = false
+                                showDialog  = true
+                            },
                             onDelete = { viewModel.deleteCity(city.id) }
                         )
                     }
@@ -163,12 +172,13 @@ fun AdminCitiesScreen(
         }
     }
 
-    // ── Add City dialog ────────────────────────────────────────────────────
-    if (showAddDialog) {
+    // ── Add / Edit City dialog ─────────────────────────────────────────────
+    if (showDialog) {
+        val isEditing = editingCity != null
+        val dismiss: () -> Unit = { newCity = ""; cityError = false; showDialog = false; editingCity = null }
+
         AlertDialog(
-            onDismissRequest = {
-                newCity = ""; cityError = false; showAddDialog = false
-            },
+            onDismissRequest = dismiss,
             shape = RoundedCornerShape(24.dp),
             title = {
                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -191,7 +201,7 @@ fun AdminCitiesScreen(
                             }
                         }
                         Text(
-                            text       = "Add New City",
+                            text       = if (isEditing) "Edit City" else "Add New City",
                             style      = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -236,23 +246,20 @@ fun AdminCitiesScreen(
                 TextButton(
                     onClick = {
                         val trimmed = newCity.trim()
-                        if (trimmed.isEmpty()) {
-                            cityError = true
-                            return@TextButton
+                        if (trimmed.isEmpty()) { cityError = true; return@TextButton }
+                        if (isEditing) {
+                            viewModel.updateCity(editingCity!!.id, trimmed)
+                        } else {
+                            viewModel.addCity(trimmed)
                         }
-                        viewModel.addCity(trimmed)
-                        newCity = ""; cityError = false; showAddDialog = false
+                        dismiss()
                     }
                 ) {
                     Text("Save", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(
-                    onClick = { newCity = ""; cityError = false; showAddDialog = false }
-                ) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = dismiss) { Text("Cancel") }
             }
         )
     }

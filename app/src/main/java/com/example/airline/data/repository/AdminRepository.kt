@@ -25,6 +25,9 @@ class AdminRepository @Inject constructor(private val adminApi: AdminApi) {
     suspend fun createCity(name: String): Result<CityItem> =
         runCatching { adminApi.createCity(CreateCityRequest(name)).data }.mapHttpError()
 
+    suspend fun updateCity(id: Int, name: String): Result<Unit> =
+        runCatching { adminApi.updateCity(id, CreateCityRequest(name)); Unit }.mapHttpError()
+
     suspend fun deleteCity(id: Int): Result<Unit> =
         runCatching { adminApi.deleteCity(id); Unit }.mapHttpError()
 
@@ -36,6 +39,11 @@ class AdminRepository @Inject constructor(private val adminApi: AdminApi) {
     suspend fun createAirport(name: String, address: String?, cityId: Int): Result<AirportItem> =
         runCatching {
             adminApi.createAirport(CreateAirportRequest(name, address, cityId)).data
+        }.mapHttpError()
+
+    suspend fun updateAirport(id: Int, name: String, address: String?, cityId: Int): Result<Unit> =
+        runCatching {
+            adminApi.updateAirport(id, CreateAirportRequest(name, address, cityId)); Unit
         }.mapHttpError()
 
     suspend fun deleteAirport(id: Int): Result<Unit> =
@@ -51,6 +59,11 @@ class AdminRepository @Inject constructor(private val adminApi: AdminApi) {
             adminApi.createAirplane(CreateAirplaneRequest(modelNumber, capacity)).data
         }.mapHttpError()
 
+    suspend fun updateAirplane(id: Int, modelNumber: String, capacity: Int): Result<Unit> =
+        runCatching {
+            adminApi.updateAirplane(id, CreateAirplaneRequest(modelNumber, capacity)); Unit
+        }.mapHttpError()
+
     suspend fun deleteAirplane(id: Int): Result<Unit> =
         runCatching { adminApi.deleteAirplane(id); Unit }.mapHttpError()
 
@@ -61,6 +74,9 @@ class AdminRepository @Inject constructor(private val adminApi: AdminApi) {
 
     suspend fun createFlight(req: CreateFlightRequest): Result<FlightItem> =
         runCatching { adminApi.createFlight(req).data }.mapHttpError()
+
+    suspend fun updateFlight(id: Int, req: CreateFlightRequest): Result<Unit> =
+        runCatching { adminApi.updateFlight(id, req); Unit }.mapHttpError()
 
     suspend fun deleteFlight(id: Int): Result<Unit> =
         runCatching { adminApi.deleteFlight(id); Unit }.mapHttpError()

@@ -69,10 +69,11 @@ fun AdminAirplanesScreen(
     val isLoading  by viewModel.isLoading.collectAsState()
     val errorMsg   by viewModel.errorMessage.collectAsState()
 
-    var showAddDialog  by remember { mutableStateOf(false) }
-    var newModelNumber by remember { mutableStateOf("") }
-    var newCapacity    by remember { mutableStateOf("200") }
-    var modelError     by remember { mutableStateOf(false) }
+    var showDialog       by remember { mutableStateOf(false) }
+    var editingAirplaneId by remember { mutableStateOf<Int?>(null) }
+    var newModelNumber   by remember { mutableStateOf("") }
+    var newCapacity      by remember { mutableStateOf("200") }
+    var modelError       by remember { mutableStateOf(false) }
 
     val snackbarHostState = remember { SnackbarHostState() }
 
@@ -119,7 +120,11 @@ fun AdminAirplanesScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick          = { showAddDialog = true },
+                onClick          = {
+                    editingAirplaneId = null
+                    newModelNumber = ""; newCapacity = "200"; modelError = false
+                    showDialog = true
+                },
                 containerColor   = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
@@ -154,7 +159,13 @@ fun AdminAirplanesScreen(
                     items(airplanes, key = { it.id }) { airplane ->
                         AirplaneCard(
                             airplane  = airplane,
-                            onEdit    = { /* Edit not yet implemented */ },
+                            onEdit    = {
+                                editingAirplaneId = airplane.id
+                                newModelNumber    = airplane.modelNumber
+                                newCapacity       = airplane.capacity.toString()
+                                modelError        = false
+                                showDialog        = true
+                            },
                             onDelete  = { viewModel.deleteAirplane(airplane.id) }
                         )
                     }
@@ -163,12 +174,13 @@ fun AdminAirplanesScreen(
         }
     }
 
-    // ── Add Airplane dialog ────────────────────────────────────────────────────
-    if (showAddDialog) {
+    // ── Add / Edit Airplane dialog ─────────────────────────────────────────────
+    if (showDialog) {
+        val isEditing = editingAirplaneId != null
         AlertDialog(
             onDismissRequest = {
                 newModelNumber = ""; newCapacity = "200"; modelError = false
-                showAddDialog  = false
+                editingAirplaneId = null; showDialog = false
             },
             shape = RoundedCornerShape(24.dp),
             title = {
@@ -192,7 +204,7 @@ fun AdminAirplanesScreen(
                             }
                         }
                         Text(
-                            text       = "Add New Airplane",
+                            text       = if (isEditing) "Edit Airplane" else "Add New Airplane",
                             style      = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -270,14 +282,15 @@ fun AdminAirplanesScreen(
                 TextButton(
                     onClick = {
                         val trimmed = newModelNumber.trim()
-                        if (trimmed.isEmpty()) {
-                            modelError = true
-                            return@TextButton
-                        }
+                        if (trimmed.isEmpty()) { modelError = true; return@TextButton }
                         val cap = newCapacity.toIntOrNull() ?: 200
-                        viewModel.addAirplane(trimmed, cap)
+                        if (isEditing) {
+                            viewModel.updateAirplane(editingAirplaneId!!, trimmed, cap)
+                        } else {
+                            viewModel.addAirplane(trimmed, cap)
+                        }
                         newModelNumber = ""; newCapacity = "200"; modelError = false
-                        showAddDialog = false
+                        editingAirplaneId = null; showDialog = false
                     }
                 ) {
                     Text("Save", fontWeight = FontWeight.Bold)
@@ -287,7 +300,7 @@ fun AdminAirplanesScreen(
                 TextButton(
                     onClick = {
                         newModelNumber = ""; newCapacity = "200"; modelError = false
-                        showAddDialog = false
+                        editingAirplaneId = null; showDialog = false
                     }
                 ) {
                     Text("Cancel")

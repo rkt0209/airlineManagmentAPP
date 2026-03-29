@@ -124,9 +124,10 @@ fun AdminFlightsScreen(
         }
     }
 
-    // Add-dialog state
-    var showAddDialog     by remember { mutableStateOf(false) }
-    var newFlightNumber   by remember { mutableStateOf("") }
+    // Add / Edit dialog state
+    var showDialog          by remember { mutableStateOf(false) }
+    var editingFlightId     by remember { mutableStateOf<Int?>(null) }
+    var newFlightNumber     by remember { mutableStateOf("") }
     var selectedAirplaneId  by remember { mutableStateOf<Int?>(null) }
     var airplaneExpanded    by remember { mutableStateOf(false) }
     var selectedDepartureId by remember { mutableStateOf<Int?>(null) }
@@ -192,7 +193,13 @@ fun AdminFlightsScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick        = { showAddDialog = true },
+                onClick        = {
+                    editingFlightId = null
+                    newFlightNumber = ""; newDepartureTime = ""; newArrivalTime = ""
+                    newPrice = ""; newBoardingGate = ""; flightNumberError = false
+                    selectedAirplaneId = null; selectedDepartureId = null; selectedArrivalId = null
+                    showDialog = true
+                },
                 containerColor = MaterialTheme.colorScheme.primary
             ) {
                 Icon(
@@ -227,7 +234,21 @@ fun AdminFlightsScreen(
                     items(flights, key = { it.id }) { flight ->
                         FlightDashboardCard(
                             flight   = flight,
-                            onEdit   = { /* Edit not yet implemented */ },
+                            onEdit   = {
+                                val original = flightItems.find { it.id == flight.id }
+                                    ?: return@FlightDashboardCard
+                                editingFlightId     = original.id
+                                newFlightNumber     = original.flightNumber
+                                selectedAirplaneId  = original.airplaneId
+                                selectedDepartureId = original.departureAirportId
+                                selectedArrivalId   = original.arrivalAirportId
+                                newDepartureTime    = original.departureTime
+                                newArrivalTime      = original.arrivalTime
+                                newPrice            = original.price.toString()
+                                newBoardingGate     = original.boardingGate ?: ""
+                                flightNumberError   = false
+                                showDialog          = true
+                            },
                             onDelete = { viewModel.deleteFlight(flight.id) }
                         )
                     }
@@ -236,15 +257,17 @@ fun AdminFlightsScreen(
         }
     }
 
-    // ── Add Flight Dialog ──────────────────────────────────────────────────────
-    if (showAddDialog) {
+    // ── Add / Edit Flight Dialog ───────────────────────────────────────────────
+    if (showDialog) {
+        val isEditing = editingFlightId != null
         val resetDialog: () -> Unit = {
             newFlightNumber = ""; newDepartureTime = ""; newArrivalTime = ""
             newPrice = ""; newBoardingGate = ""; flightNumberError = false
             selectedAirplaneId  = null
             selectedDepartureId = null
             selectedArrivalId   = null
-            showAddDialog       = false
+            editingFlightId     = null
+            showDialog          = false
         }
 
         AlertDialog(
@@ -271,7 +294,7 @@ fun AdminFlightsScreen(
                             }
                         }
                         Text(
-                            text       = "Add New Flight",
+                            text       = if (isEditing) "Edit Flight" else "Add New Flight",
                             style      = MaterialTheme.typography.titleLarge,
                             fontWeight = FontWeight.Bold
                         )
@@ -542,16 +565,30 @@ fun AdminFlightsScreen(
                             return@TextButton
                         }
 
-                        viewModel.addFlight(
-                            flightNumber       = number,
-                            airplaneId         = airplane.id,
-                            departureAirportId = departure.id,
-                            arrivalAirportId   = arrival.id,
-                            departureTime      = newDepartureTime,
-                            arrivalTime        = newArrivalTime,
-                            price              = price,
-                            boardingGate       = newBoardingGate.trim()
-                        )
+                        if (isEditing) {
+                            viewModel.updateFlight(
+                                id                 = editingFlightId!!,
+                                flightNumber       = number,
+                                airplaneId         = airplane.id,
+                                departureAirportId = departure.id,
+                                arrivalAirportId   = arrival.id,
+                                departureTime      = newDepartureTime,
+                                arrivalTime        = newArrivalTime,
+                                price              = price,
+                                boardingGate       = newBoardingGate.trim()
+                            )
+                        } else {
+                            viewModel.addFlight(
+                                flightNumber       = number,
+                                airplaneId         = airplane.id,
+                                departureAirportId = departure.id,
+                                arrivalAirportId   = arrival.id,
+                                departureTime      = newDepartureTime,
+                                arrivalTime        = newArrivalTime,
+                                price              = price,
+                                boardingGate       = newBoardingGate.trim()
+                            )
+                        }
                         resetDialog()
                     }
                 ) {

@@ -98,6 +98,38 @@ class AdminFlightsViewModel @Inject constructor(
         }
     }
 
+    fun updateFlight(
+        id: Int,
+        flightNumber: String,
+        airplaneId: Int,
+        departureAirportId: Int,
+        arrivalAirportId: Int,
+        departureTime: String,
+        arrivalTime: String,
+        price: Int,
+        boardingGate: String?
+    ) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            repository.updateFlight(
+                id,
+                CreateFlightRequest(
+                    flightNumber       = flightNumber,
+                    airplaneId         = airplaneId,
+                    departureAirportId = departureAirportId,
+                    arrivalAirportId   = arrivalAirportId,
+                    departureTime      = departureTime,
+                    arrivalTime        = arrivalTime,
+                    price              = price,
+                    boardingGate       = boardingGate?.ifBlank { null }
+                )
+            )
+                .onSuccess  { fetchFlights() }
+                .onFailure  { _errorMessage.value = it.message }
+            _isLoading.value = false
+        }
+    }
+
     fun deleteFlight(id: Int) {
         viewModelScope.launch {
             repository.deleteFlight(id)
