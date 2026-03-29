@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 import javax.inject.Inject
 
 sealed class FlightSearchState {
@@ -27,7 +30,7 @@ class FlightResultsViewModel @Inject constructor(
     private val _searchState = MutableStateFlow<FlightSearchState>(FlightSearchState.Idle)
     val searchState: StateFlow<FlightSearchState> = _searchState.asStateFlow()
 
-    fun searchFlights(departureAirportId: Int, arrivalAirportId: Int) {
+    fun searchFlights(departureAirportId: Int, arrivalAirportId: Int, date: String) {
         if (_searchState.value is FlightSearchState.Searching) return
         viewModelScope.launch {
             _searchState.value = FlightSearchState.Searching
@@ -35,7 +38,8 @@ class FlightResultsViewModel @Inject constructor(
                 onSuccess = { all ->
                     val filtered = all.filter {
                         it.departureAirportId == departureAirportId &&
-                        it.arrivalAirportId   == arrivalAirportId
+                        it.arrivalAirportId   == arrivalAirportId &&
+                        matchesDate(it.departureTime, date)
                     }
                     _searchState.value = if (filtered.isEmpty()) FlightSearchState.Empty
                                          else FlightSearchState.Success(filtered)
@@ -44,6 +48,20 @@ class FlightResultsViewModel @Inject constructor(
                     _searchState.value = FlightSearchState.Error(it.message ?: "Search failed")
                 }
             )
+        }
+    }
+
+    /** Returns true if [departureTimeIso] falls on the same local date as [selectedDate] (yyyy-MM-dd). */
+    private fun matchesDate(departureTimeIso: String, selectedDate: String): Boolean {
+        if (selectedDate.isBlank()) return true
+        return try {
+            val flightDate = Instant.parse(departureTimeIso)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
+            val targetDate = LocalDate.parse(selectedDate)
+            flightDate == targetDate
+        } catch (_: Exception) {
+            true // If parsing fails, don't filter out the flight
         }
     }
 }

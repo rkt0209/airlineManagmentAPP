@@ -25,11 +25,16 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -55,15 +60,11 @@ fun MyBookingsScreen(
     viewModel:     BookingViewModel = hiltViewModel()
 ) {
     val myBookingsState by viewModel.myBookingsState.collectAsState()
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
 
     // Fetch bookings when the screen first appears
     LaunchedEffect(Unit) {
         viewModel.fetchMyBookings()
-    }
-
-    val bookings: List<BookingUi> = when (val s = myBookingsState) {
-        is MyBookingsState.Success -> s.bookings
-        else -> emptyList()
     }
 
     Box(
@@ -110,11 +111,14 @@ fun MyBookingsScreen(
                             fontWeight = FontWeight.Bold
                         )
                         when (val s = myBookingsState) {
-                            is MyBookingsState.Success -> Text(
-                                text  = "${s.bookings.size} booking${if (s.bookings.size != 1) "s" else ""}",
-                                color = PassOnHeaderMuted,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
+                            is MyBookingsState.Success -> {
+                                val total = s.upcoming.size + s.past.size
+                                Text(
+                                    text  = "$total booking${if (total != 1) "s" else ""}",
+                                    color = PassOnHeaderMuted,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
                             else -> Text(
                                 text  = "Loading your bookings…",
                                 color = PassOnHeaderMuted,
@@ -126,6 +130,34 @@ fun MyBookingsScreen(
             }
 
             item { Spacer(Modifier.height(16.dp)) }
+
+            // ── Upcoming / Previous tab row (only when data is loaded) ─────────
+            if (myBookingsState is MyBookingsState.Success) {
+                item {
+                    TabRow(
+                        selectedTabIndex = selectedTab,
+                        modifier         = Modifier.fillMaxWidth()
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick  = { selectedTab = 0 },
+                            text     = {
+                                val s = myBookingsState as MyBookingsState.Success
+                                Text("Upcoming (${s.upcoming.size})")
+                            }
+                        )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick  = { selectedTab = 1 },
+                            text     = {
+                                val s = myBookingsState as MyBookingsState.Success
+                                Text("Previous (${s.past.size})")
+                            }
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+                }
+            }
 
             // ── State-driven content ──────────────────────────────────────────
             when (val s = myBookingsState) {
@@ -184,14 +216,40 @@ fun MyBookingsScreen(
                 }
 
                 is MyBookingsState.Success -> {
-                    items(bookings) { booking ->
-                        BoardingPassCard(
-                            booking           = booking,
-                            screenBackground  = MaterialTheme.colorScheme.background,
-                            modifier          = Modifier
-                                .padding(horizontal = 16.dp)
-                                .padding(bottom = 16.dp)
-                        )
+                    val displayed = if (selectedTab == 0) s.upcoming else s.past
+                    if (displayed.isEmpty()) {
+                        item {
+                            Column(
+                                modifier            = Modifier
+                                    .fillMaxWidth()
+                                    .padding(32.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector        = Icons.Filled.FlightTakeoff,
+                                    contentDescription = null,
+                                    tint               = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                                    modifier           = Modifier.size(48.dp)
+                                )
+                                Text(
+                                    text      = if (selectedTab == 0) "No upcoming flights." else "No previous flights.",
+                                    style     = MaterialTheme.typography.bodyLarge,
+                                    color     = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        items(displayed) { booking ->
+                            BoardingPassCard(
+                                booking           = booking,
+                                screenBackground  = MaterialTheme.colorScheme.background,
+                                modifier          = Modifier
+                                    .padding(horizontal = 16.dp)
+                                    .padding(bottom = 16.dp)
+                            )
+                        }
                     }
                 }
             }

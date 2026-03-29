@@ -89,9 +89,9 @@ fun FlightResultsScreen(
 ) {
     val searchState by viewModel.searchState.collectAsState()
 
-    // Trigger search once when the screen is first shown
-    LaunchedEffect(departureAirportId, arrivalAirportId) {
-        viewModel.searchFlights(departureAirportId, arrivalAirportId)
+    // Trigger search when screen is first shown (or if any search parameter changes)
+    LaunchedEffect(departureAirportId, arrivalAirportId, selectedDate) {
+        viewModel.searchFlights(departureAirportId, arrivalAirportId, selectedDate)
     }
 
     // Map API FlightItem → FlightUi
@@ -236,7 +236,7 @@ fun FlightResultsScreen(
                                 textAlign = TextAlign.Center
                             )
                             Button(onClick = {
-                                viewModel.searchFlights(departureAirportId, arrivalAirportId)
+                                viewModel.searchFlights(departureAirportId, arrivalAirportId, selectedDate)
                             }) { Text("Retry") }
                         }
                     }

@@ -11,17 +11,19 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
+import java.time.Instant
 import java.util.Locale
 import javax.inject.Inject
 
 // Shared UI model used by both BookingViewModel and MyBookingsScreen
 data class BookingUi(
-    val bookingId:    String,
-    val route:        String,
-    val flightNumber: String,
-    val seatsBooked:  Int,
-    val totalCost:    String,
-    val status:       String
+    val bookingId:        String,
+    val route:            String,
+    val flightNumber:     String,
+    val seatsBooked:      Int,
+    val totalCost:        String,
+    val status:           String,
+    val departureTimeIso: String = ""
 )
 
 sealed class BookingCreateState {
@@ -34,8 +36,8 @@ sealed class BookingCreateState {
 sealed class MyBookingsState {
     object Loading : MyBookingsState()
     object Empty   : MyBookingsState()
-    data class Success(val bookings: List<BookingUi>) : MyBookingsState()
-    data class Error(val message: String)             : MyBookingsState()
+    data class Success(val upcoming: List<BookingUi>, val past: List<BookingUi>) : MyBookingsState()
+    data class Error(val message: String) : MyBookingsState()
 }
 
 @HiltViewModel
@@ -111,15 +113,36 @@ class BookingViewModel @Inject constructor(
                 val depCode = depAirport?.name?.take(3)?.uppercase() ?: "???"
                 val arrCode = arrAirport?.name?.take(3)?.uppercase() ?: "???"
                 BookingUi(
-                    bookingId    = "BKG-${booking.id}",
-                    route        = "$depCode to $arrCode",
-                    flightNumber = flight?.flightNumber ?: "FL-${booking.flightId}",
-                    seatsBooked  = booking.noOfSeats,
-                    totalCost    = "₹${fmt.format(booking.totalCost)}",
-                    status       = booking.status
+                    bookingId        = "BKG-${booking.id}",
+                    route            = "$depCode to $arrCode",
+                    flightNumber     = flight?.flightNumber ?: "FL-${booking.flightId}",
+                    seatsBooked      = booking.noOfSeats,
+                    totalCost        = "₹${fmt.format(booking.totalCost)}",
+                    status           = booking.status,
+                    departureTimeIso = flight?.departureTime ?: ""
                 )
             }
-            _myBookingsState.value = MyBookingsState.Success(uiItems)
+
+            val now = Instant.now()
+            val upcoming = uiItems
+                .filter { b ->
+                    try { Instant.parse(b.departureTimeIso).isAfter(now) } catch (_: Exception) { false }
+                }
+                .sortedBy { b ->
+                    try { Instant.parse(b.departureTimeIso) } catch (_: Exception) { Instant.MAX }
+                }
+            val past = uiItems
+                .filter { b ->
+                    try { !Instant.parse(b.departureTimeIso).isAfter(now) } catch (_: Exception) { true }
+                }
+                .sortedByDescending { b ->
+                    try { Instant.parse(b.departureTimeIso) } catch (_: Exception) { Instant.MIN }
+                }
+
+            _myBookingsState.value = if (upcoming.isEmpty() && past.isEmpty())
+                MyBookingsState.Empty
+            else
+                MyBookingsState.Success(upcoming, past)
         }
     }
 }
